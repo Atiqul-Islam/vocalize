@@ -1,0 +1,59 @@
+[package]
+name = "vocalize-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Python bindings for Vocalize - high-performance text-to-speech synthesis"
+
+[lib]
+name = "vocalize_python"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Core vocalize library
+vocalize-core = { path = "../vocalize-core" }
+
+# PyO3 for Python bindings
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py38"] }
+pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization for Python types
+serde = { workspace = true }
+serde_json = "1.0"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+pyo3-log = "0.8"
+
+# Utilities
+uuid = { workspace = true }
+dirs = "5.0"
+
+# ONNX Runtime for 2025 implementation
+ort = "2.0.0-rc.10"
+
+[dev-dependencies]
+# Testing
+pyo3-build-config = "0.20"
+tempfile = { workspace = true }
+
+[build-dependencies]
+pyo3-build-config = "0.20"
+
+[features]
+default = []
+# Removed audio feature - now built-in with OS native APIs
+

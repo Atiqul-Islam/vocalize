@@ -1,0 +1,84 @@
+[package]
+name = "vocalize-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Core TTS engine for Vocalize - high-performance text-to-speech synthesis"
+
+[dependencies]
+# Core dependencies
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+# ONNX Runtime with load-dynamic (no DLL dependencies)
+ort = { version = "2.0.0-rc.10", features = ["load-dynamic"] }
+
+# ndarray for tensor operations
+ndarray = "0.15"
+
+# Model management and downloads
+hf-hub = { version = "0.3", features = ["tokio"] }  # HuggingFace Hub integration
+reqwest.workspace = true  # Cross-platform TLS with rustls
+sha2 = "0.10"                  # Model integrity verification
+
+# Archive extraction for cross-platform ONNX Runtime download
+tar = "0.4"                    # TAR archive extraction (Linux/macOS)
+flate2 = "1.0"                 # GZ decompression
+zip = "0.6"                    # ZIP extraction (Windows)
+
+# Text processing
+tokenizers = "0.15"            # HuggingFace tokenizers
+unicode-normalization = "0.1"  # Text normalization
+
+serde_json = "1.0"
+
+# Audio file writing (no external system deps)
+hound = "3.5"  # WAV writing
+# mp3lame-encoder = "0.1"  # MP3 encoding (optional, commented for now)
+
+# Utilities
+uuid.workspace = true
+once_cell.workspace = true
+glob = "0.3"  # Pattern matching for file discovery
+home = "0.5"  # Cross-platform home directory
+parking_lot.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+# Existing test deps
+criterion.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+env_logger.workspace = true
+tokio-test = "0.4"
+serde_json = "1.0"
+
+# Comprehensive testing tools
+mockall = "0.12"           # Mock objects for external dependencies
+wiremock = "0.6"           # HTTP mocking for model downloads
+assert_fs = "1.1"          # File system testing
+predicates = "3.1"         # Assertion predicates
+test-log = "0.2"           # Capture logs in tests
+serial_test = "3.1"        # Sequential test execution
+rstest = "0.18"            # Parameterized tests
+
+[features]
+default = []
+# Removed audio feature - now built-in with OS native APIs
+
+[[bench]]
+name = "tts_benchmark"
+harness = false
+
+[[bench]]
+name = "audio_benchmark"
+harness = false

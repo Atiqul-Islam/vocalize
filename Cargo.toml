@@ -1,0 +1,58 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vocalize-core",
+    "crates/vocalize-python",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "PolyForm-Noncommercial-1.0.0"
+authors = ["Vocalize Contributors"]
+repository = "https://github.com/vocalize/vocalize"
+homepage = "https://github.com/vocalize/vocalize"
+documentation = "https://docs.rs/vocalize"
+keywords = ["tts", "text-to-speech", "audio", "speech", "ai"]
+categories = ["multimedia::audio", "api-bindings"]
+
+[workspace.dependencies]
+# Core dependencies
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# HTTP client with cross-platform TLS
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "stream", "blocking", "json"] }
+
+# Audio processing (OS native only)
+# Removed external deps: cpal, rodio, hound, symphonia
+
+# TTS and ML (lightweight, auto-download models)
+# Removed heavy deps: candle-core, candle-nn, candle-transformers, tokenizers
+
+# Utilities
+uuid = { version = "1.0", features = ["v4"] }
+once_cell = "1.19"
+parking_lot = "0.12"
+rayon = "1.8"
+
+# Development dependencies
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+tempfile = "3.8"
+env_logger = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+lto = true
+codegen-units = 1
