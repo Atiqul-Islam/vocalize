@@ -118,21 +118,14 @@ fn synthesize_from_tokens_neural(
     
     // Use ONNX engine directly for token-based synthesis
     use vocalize_core::{onnx_engine::OnnxTtsEngine, model::ModelId};
-    use std::path::PathBuf;
     
     // Create runtime for async operations
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| PyVocalizeError::new_err(format!("Failed to create async runtime: {}", e)))?;
     
     rt.block_on(async {
-        // Get cache directory
-        let home_dir = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .unwrap_or_else(|_| "/tmp".to_string());
-        let cache_dir = PathBuf::from(home_dir).join(".vocalize").join("models");
-        
-        // Create ONNX engine
-        let mut engine = OnnxTtsEngine::new(cache_dir).await
+        // Create ONNX engine with cross-platform cache directory
+        let mut engine = OnnxTtsEngine::new_with_default_cache().await
             .map_err(|e| PyVocalizeError::new_err(format!("Failed to create ONNX engine: {}", e)))?;
         
         // Determine model ID
@@ -227,6 +220,107 @@ fn save_audio_neural(audio_data: Vec<f32>, output_path: String, format: Option<S
 /// Python module for Vocalize TTS functionality
 #[pymodule]
 fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    // Set up ONNX Runtime DLL path IMMEDIATELY on module load
+    // This must happen before ANY ort code is touched
+    #[cfg(target_os = "windows")]
+    {
+        use winapi::um::libloaderapi::{LoadLibraryExW, LOAD_WITH_ALTERED_SEARCH_PATH};
+        use winapi::um::errhandlingapi::GetLastError;
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr::null_mut;
+        
+        if std::env::var("ORT_DYLIB_PATH").is_err() {
+            // Get the site-packages path
+            let sys = _py.import("sys")?;
+            let prefix: String = sys.getattr("prefix")?.extract()?;
+            let dll_dir = format!("{}\\Lib\\site-packages\\vocalize_python", prefix);
+            
+            // First, check if System32 has a conflicting version
+            let system32_dll = "C:\\Windows\\System32\\onnxruntime.dll";
+            if std::path::Path::new(system32_dll).exists() {
+                eprintln!("⚠️  WARNING: Found ONNX Runtime in System32 at: {}", system32_dll);
+                eprintln!("   This may conflict with the bundled version.");
+            }
+            
+            // Add directory to Python's DLL search path (for Python 3.8+)
+            let os = _py.import("os")?;
+            if let Ok(add_dll_dir) = os.getattr("add_dll_directory") {
+                add_dll_dir.call1((dll_dir.clone(),))?;
+                eprintln!("✅ Added DLL directory to Python search path: {}", dll_dir);
+            }
+            
+            // Pre-emptively load our DLLs using Windows API
+            let providers_path = format!("{}\\onnxruntime_providers_shared.dll", dll_dir);
+            let onnx_path = format!("{}\\onnxruntime.dll", dll_dir);
+            
+            // Convert paths to wide strings for Windows API
+            let providers_wide: Vec<u16> = OsStr::new(&providers_path)
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            let onnx_wide: Vec<u16> = OsStr::new(&onnx_path)
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            
+            unsafe {
+                // Load providers DLL first (dependency)
+                let providers_handle = LoadLibraryExW(
+                    providers_wide.as_ptr(),
+                    null_mut(),
+                    LOAD_WITH_ALTERED_SEARCH_PATH
+                );
+                
+                if providers_handle.is_null() {
+                    let error = GetLastError();
+                    eprintln!("❌ Failed to pre-load onnxruntime_providers_shared.dll");
+                    eprintln!("   Path: {}", providers_path);
+                    eprintln!("   Error code: {}", error);
+                } else {
+                    eprintln!("✅ Pre-loaded onnxruntime_providers_shared.dll");
+                }
+                
+                // Load main ONNX Runtime DLL
+                let onnx_handle = LoadLibraryExW(
+                    onnx_wide.as_ptr(),
+                    null_mut(),
+                    LOAD_WITH_ALTERED_SEARCH_PATH
+                );
+                
+                if onnx_handle.is_null() {
+                    let error = GetLastError();
+                    eprintln!("❌ Failed to pre-load onnxruntime.dll");
+                    eprintln!("   Path: {}", onnx_path);
+                    eprintln!("   Error code: {}", error);
+                    
+                    // If pre-loading failed, show detailed error message
+                    if std::path::Path::new(system32_dll).exists() {
+                        eprintln!("\n🚨 ONNX Runtime Version Conflict Detected!");
+                        eprintln!("   System32 contains an incompatible version of ONNX Runtime.");
+                        eprintln!("   This is preventing the correct version from loading.\n");
+                        eprintln!("   Solutions:");
+                        eprintln!("   1. Run as Administrator and rename the System32 version:");
+                        eprintln!("      ren C:\\Windows\\System32\\onnxruntime.dll onnxruntime.dll.bak");
+                        eprintln!("   2. Or uninstall the system-wide ONNX Runtime");
+                        
+                        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                            "ONNX Runtime version conflict: System32 contains incompatible version. See error message above for solutions."
+                        ));
+                    }
+                } else {
+                    eprintln!("✅ Pre-loaded onnxruntime.dll");
+                }
+            }
+            
+            // Now set ORT_DYLIB_PATH for the ort crate
+            // Use forward slashes for consistency with the ort crate
+            let dll_path = onnx_path.replace('\\', "/");
+            std::env::set_var("ORT_DYLIB_PATH", &dll_path);
+            eprintln!("✅ Set ORT_DYLIB_PATH to: {}", dll_path);
+        }
+    }
+    
     // Initialize logging
     pyo3_log::init();
 

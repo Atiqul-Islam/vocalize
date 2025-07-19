@@ -55,13 +55,13 @@ impl OnnxSessionPool {
     async fn create_optimized_session(model_path: &std::path::Path) -> Result<Session> {
         tracing::debug!("🔧 Creating ONNX session with anti-deadlock configuration");
         
-        // Set up session with stable configuration for TTS (prevents hanging)
+        // Set up session with optimized configuration for better performance
         let session = Session::builder()?
-            // Use moderate optimization to prevent instability
-            .with_optimization_level(GraphOptimizationLevel::Level1)?
-            // CRITICAL: Single thread to prevent deadlocks
-            .with_intra_threads(1)?
-            .with_inter_threads(1)?
+            // Use maximum optimization for speed
+            .with_optimization_level(GraphOptimizationLevel::Level3)?
+            // Multi-threading for better performance
+            .with_intra_threads(4)?
+            .with_inter_threads(4)?
             // Enable memory pattern optimization
             .with_memory_pattern(true)?
             // Load the model

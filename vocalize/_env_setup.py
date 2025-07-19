@@ -1,44 +1,55 @@
 """
-Early environment setup for ONNX Runtime.
+Early environment setup for threading optimization.
 
 This module MUST be imported before any other imports to prevent
-ONNX Runtime from initializing with default multi-threaded settings
-that cause deadlocks on certain systems.
+threading conflicts and ensure optimal performance.
 """
 
 import os
 import sys
-from pathlib import Path
 
 # CRITICAL: Set thread limits BEFORE any library initialization
-# This prevents deadlocks in ONNX Runtime on WSL and other systems
+# Use optimal number of threads for performance
+import multiprocessing
+num_threads = str(multiprocessing.cpu_count())
 os.environ.update({
-    'OMP_NUM_THREADS': '1',
-    'MKL_NUM_THREADS': '1', 
-    'NUMEXPR_NUM_THREADS': '1',
-    'ORT_DISABLE_SPINNING': '1',
-    'OPENBLAS_NUM_THREADS': '1',
-    'VECLIB_MAXIMUM_THREADS': '1',
-    'BLIS_NUM_THREADS': '1',
+    'OMP_NUM_THREADS': num_threads,
+    'MKL_NUM_THREADS': num_threads, 
+    'NUMEXPR_NUM_THREADS': num_threads,
+    'ORT_DISABLE_SPINNING': '0',  # Enable spinning for better performance
+    'OPENBLAS_NUM_THREADS': num_threads,
+    'VECLIB_MAXIMUM_THREADS': num_threads,
+    'BLIS_NUM_THREADS': num_threads,
 })
 
-# Set ONNX Runtime library path for load-dynamic feature
-# This ensures the bundled libonnxruntime.so is used
-vocalize_root = Path(__file__).parent.parent
-onnx_lib_path = vocalize_root / "crates" / "vocalize-core" / "onnxruntime" / "libonnxruntime.so"
+# Download required NLTK data if not present
+def ensure_nltk_data():
+    """Download required NLTK data if not available."""
+    try:
+        import nltk
+        from nltk.corpus import stopwords
+        from nltk.tag import pos_tag
+        
+        # Test if averaged_perceptron_tagger_eng is available
+        try:
+            pos_tag(['test'])
+        except LookupError:
+            print("📥 Downloading NLTK data (averaged_perceptron_tagger_eng)...")
+            nltk.download('averaged_perceptron_tagger_eng', quiet=True)
+            nltk.download('punkt', quiet=True)  # Often needed with tagger
+            
+    except ImportError:
+        # NLTK not available, skip
+        pass
+    except Exception:
+        # Silent fail for NLTK issues
+        pass
 
-if onnx_lib_path.exists():
-    os.environ['ORT_DYLIB_PATH'] = str(onnx_lib_path)
-    # Also add to LD_LIBRARY_PATH for Linux systems
-    if sys.platform.startswith('linux'):
-        ld_path = os.environ.get('LD_LIBRARY_PATH', '')
-        onnx_dir = str(onnx_lib_path.parent)
-        if onnx_dir not in ld_path:
-            os.environ['LD_LIBRARY_PATH'] = f"{onnx_dir}:{ld_path}" if ld_path else onnx_dir
+# Download NLTK data on import
+ensure_nltk_data()
 
 # Debug output if verbose mode is detected
 if '--verbose' in sys.argv or os.environ.get('VOCALIZE_DEBUG'):
     print(f"🔧 Environment setup complete:")
     print(f"   OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS')}")
-    print(f"   ORT_DYLIB_PATH: {os.environ.get('ORT_DYLIB_PATH')}")
-    print(f"   Threading: Single-threaded mode enabled")
+    print(f"   Threading: Multi-threaded mode ({num_threads} threads)")

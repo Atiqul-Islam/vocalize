@@ -19,8 +19,8 @@ thiserror.workspace = true
 serde.workspace = true
 tracing.workspace = true
 
-# ONNX Runtime with load-dynamic (no DLL dependencies)
-ort = { version = "2.0.0-rc.10", features = ["load-dynamic"] }
+# ONNX Runtime with load-dynamic for bundled DLL distribution (like ONNX Runtime PyPI package)
+ort = { version = "2.0.0-rc.10", features = ["load-dynamic"], default-features = false }
 
 # ndarray for tensor operations
 ndarray = "0.15"
@@ -30,10 +30,9 @@ hf-hub = { version = "0.3", features = ["tokio"] }  # HuggingFace Hub integratio
 reqwest.workspace = true  # Cross-platform TLS with rustls
 sha2 = "0.10"                  # Model integrity verification
 
-# Archive extraction for cross-platform ONNX Runtime download
+# Archive extraction (still needed for model downloads)
 tar = "0.4"                    # TAR archive extraction (Linux/macOS)
 flate2 = "1.0"                 # GZ decompression
-zip = "0.6"                    # ZIP extraction (Windows)
 
 # Text processing
 tokenizers = "0.15"            # HuggingFace tokenizers
@@ -49,9 +48,11 @@ hound = "3.5"  # WAV writing
 uuid.workspace = true
 once_cell.workspace = true
 glob = "0.3"  # Pattern matching for file discovery
-home = "0.5"  # Cross-platform home directory
+directories = "5.0"  # Cross-platform application directories
 parking_lot.workspace = true
 rayon.workspace = true
+chrono = "0.4"  # For timestamp logging
+
 
 [dev-dependencies]
 # Existing test deps

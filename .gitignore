@@ -159,6 +159,15 @@ hello_*.wav
 output.log
 debug_output.log
 
+# Test scripts in root directory
+/test_*.py
+/check_*.py
+
+# Build artifacts
+Dependencies.zip
+*.zip
+temp/
+
 # UV/pip build artifacts
 .uv/
 pip-wheel-metadata/

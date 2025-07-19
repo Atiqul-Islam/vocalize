@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use directories::ProjectDirs;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModelManifest {
@@ -28,12 +29,19 @@ impl ModelDiscovery {
     pub fn new() -> Self {
         let mut cache_dirs = Vec::new();
         
-        // Standard cache directories
-        if let Some(home) = home::home_dir() {
+        // Standard cache directories using cross-platform paths
+        if let Some(proj_dirs) = ProjectDirs::from("ai", "Vocalize", "vocalize") {
+            // Use cross-platform cache directory
+            cache_dirs.push(proj_dirs.cache_dir().join("models"));
+        }
+        
+        // Also check legacy paths for backward compatibility
+        if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+            let home_path = PathBuf::from(home);
             // HuggingFace cache
-            cache_dirs.push(home.join(".cache/huggingface/hub"));
-            // Local vocalize cache
-            cache_dirs.push(home.join(".vocalize/models"));
+            cache_dirs.push(home_path.join(".cache/huggingface/hub"));
+            // Legacy vocalize cache
+            cache_dirs.push(home_path.join(".vocalize/models"));
         }
         
         // System cache directories

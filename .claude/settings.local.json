@@ -77,7 +77,27 @@
       "WebFetch(domain:crates.io)",
       "WebFetch(domain:plotly.com)",
       "WebFetch(domain:pymupdf.readthedocs.io)",
-      "WebFetch(domain:artifex.com)"
+      "WebFetch(domain:artifex.com)",
+      "Bash(git restore:*)",
+      "WebFetch(domain:peps.python.org)",
+      "Bash(echo $HOME)",
+      "Bash(echo:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(chmod:*)",
+      "Bash(unzip:*)",
+      "Bash(cat:*)",
+      "WebFetch(domain:visualstudio.microsoft.com)",
+      "Bash(clang:*)",
+      "Bash(lld:*)",
+      "Bash(maturin build:*)",
+      "Bash(RUST_BACKTRACE=1 maturin build --release --target x86_64-pc-windows-msvc)",
+      "Bash(7z:*)",
+      "Bash(/mnt/c/Users/iatiq/Documents/dev/personal/vocalize/.venv/Scripts/delvewheel.exe show target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64.whl)",
+      "WebFetch(domain:pyo3.rs)",
+      "Bash(./download_and_extract_vcredist_dlls.sh:*)",
+      "Bash(cabextract:*)",
+      "Bash(./test_extract_vcredist.sh:*)",
+      "Bash(./test_simple_extract.sh:*)"
     ],
     "deny": []
   }

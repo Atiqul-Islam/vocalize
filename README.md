@@ -133,6 +133,38 @@ uv run python -m vocalize.cli config list
 - Rust (for building from source)
 - UV package manager
 - PortAudio (for audio playback only)
+- **Windows**: WSL2 (Windows Subsystem for Linux) for building
+- **macOS**: Xcode Command Line Tools (`xcode-select --install`)
+
+## Development
+
+For detailed development setup and build instructions, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+### Quick Start for Developers
+
+**Prerequisites:**
+- Python 3.8+ with UV package manager
+- Rust toolchain
+- WSL2 (for Windows development)
+- 7-Zip (for WSL)
+
+**Building on WSL (for Windows):**
+```bash
+# In WSL terminal
+cd /mnt/c/Users/[your-username]/Documents/dev/personal/vocalize
+./build_and_bundle_complete.sh
+```
+
+**Installing on Windows:**
+```powershell
+# In Windows terminal
+cd C:\Users\[your-username]\Documents\dev\personal\vocalize
+uv sync
+uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
+uv run python -m vocalize
+```
+
+For other platforms and detailed instructions, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Examples
 

@@ -6,6 +6,7 @@ pub mod session_pool;
 use std::path::PathBuf;
 use anyhow::{Result, Context};
 use unicode_normalization::UnicodeNormalization;
+use directories::ProjectDirs;
 
 use crate::model::{ModelManager, ModelId};
 use crate::{VocalizeResult, VocalizeError};
@@ -21,161 +22,13 @@ pub struct OnnxTtsEngine {
 }
 
 impl OnnxTtsEngine {
-    /// Ensure ONNX Runtime library is available for the current platform
-    async fn ensure_onnx_runtime_available() -> Result<String> {
-        // Determine the platform and appropriate library name
-        let (platform, lib_name) = if cfg!(target_os = "windows") {
-            ("win-x64", "onnxruntime.dll")
-        } else if cfg!(target_os = "macos") {
-            ("osx-x64", "libonnxruntime.dylib")  // or osx-arm64 for Apple Silicon
-        } else {
-            ("linux-x64", "libonnxruntime.so")
-        };
-        
-        let version = "1.22.0";
-        let ort_dir = PathBuf::from("onnxruntime");
-        let lib_path = ort_dir.join(lib_name);
-        
-        // Check if library already exists
-        if lib_path.exists() {
-            tracing::info!("ONNX Runtime library already exists: {:?}", lib_path);
-            return Ok(lib_path.to_string_lossy().to_string());
-        }
-        
-        // Create directory
-        std::fs::create_dir_all(&ort_dir)
-            .context("Failed to create onnxruntime directory")?;
-        
-        // Download the platform-specific ONNX Runtime
-        tracing::info!("Downloading ONNX Runtime {} for platform: {}", version, platform);
-        
-        let archive_name = if cfg!(target_os = "windows") {
-            format!("onnxruntime-{}-{}.zip", platform, version)
-        } else {
-            format!("onnxruntime-{}-{}.tgz", platform, version)
-        };
-        
-        let download_url = format!(
-            "https://github.com/microsoft/onnxruntime/releases/download/v{}/{}",
-            version, archive_name
-        );
-        
-        tracing::info!("Downloading from: {}", download_url);
-        
-        // Download and extract in a blocking task
-        let lib_path_clone = lib_path.clone();
-        let ort_dir_clone = ort_dir.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            Self::download_and_extract_ort(&download_url, &archive_name, &ort_dir_clone, &lib_path_clone, lib_name)
-        }).await.context("Failed to spawn download task")?;
-        
-        result?;
-        
-        if lib_path.exists() {
-            tracing::info!("Successfully downloaded ONNX Runtime library: {:?}", lib_path);
-            Ok(lib_path.to_string_lossy().to_string())
-        } else {
-            Err(anyhow::anyhow!("Downloaded ONNX Runtime but library file not found: {:?}", lib_path))
-        }
-    }
-    
-    /// Download and extract ONNX Runtime for the current platform
-    fn download_and_extract_ort(
-        download_url: &str,
-        archive_name: &str,
-        ort_dir: &PathBuf,
-        lib_path: &PathBuf,
-        lib_name: &str,
-    ) -> Result<()> {
-        use std::fs::File;
-        use std::io::Write;
-        
-        // Download the archive
-        let archive_path = ort_dir.join(archive_name);
-        tracing::info!("Downloading to: {:?}", archive_path);
-        
-        let response = reqwest::blocking::get(download_url)
-            .context("Failed to download ONNX Runtime")?;
-        
-        if !response.status().is_success() {
-            return Err(anyhow::anyhow!("Failed to download ONNX Runtime: HTTP {}", response.status()));
-        }
-        
-        let bytes = response.bytes().context("Failed to read download response")?;
-        let mut file = File::create(&archive_path).context("Failed to create archive file")?;
-        file.write_all(&bytes).context("Failed to write archive file")?;
-        
-        // Extract the archive
-        tracing::info!("Extracting archive: {:?}", archive_path);
-        
-        if cfg!(target_os = "windows") {
-            // Extract ZIP file
-            let file = File::open(&archive_path).context("Failed to open ZIP archive")?;
-            let mut archive = zip::ZipArchive::new(file).context("Failed to read ZIP archive")?;
-            
-            for i in 0..archive.len() {
-                let mut file = archive.by_index(i).context("Failed to get ZIP entry")?;
-                let outpath = ort_dir.join(file.mangled_name());
-                
-                if file.name().ends_with('/') {
-                    std::fs::create_dir_all(&outpath).context("Failed to create directory")?;
-                } else {
-                    if let Some(p) = outpath.parent() {
-                        if !p.exists() {
-                            std::fs::create_dir_all(&p).context("Failed to create parent directory")?;
-                        }
-                    }
-                    let mut outfile = File::create(&outpath).context("Failed to create output file")?;
-                    std::io::copy(&mut file, &mut outfile).context("Failed to extract file")?;
-                }
-            }
-        } else {
-            // Extract TAR.GZ file
-            let tar_gz = File::open(&archive_path).context("Failed to open TAR.GZ archive")?;
-            let tar = flate2::read::GzDecoder::new(tar_gz);
-            let mut archive = tar::Archive::new(tar);
-            archive.unpack(&ort_dir).context("Failed to extract TAR.GZ archive")?;
-        }
-        
-        // Find the extracted library file
-        for entry in std::fs::read_dir(&ort_dir).context("Failed to read ort directory")? {
-            let entry = entry.context("Failed to read directory entry")?;
-            let path = entry.path();
-            
-            if path.is_dir() {
-                // Look for the library in the lib subdirectory
-                let lib_dir = path.join("lib");
-                if lib_dir.exists() {
-                    let source_lib = lib_dir.join(lib_name);
-                    if source_lib.exists() {
-                        std::fs::copy(&source_lib, &lib_path)
-                            .context("Failed to copy library file")?;
-                        tracing::info!("Copied library from {:?} to {:?}", source_lib, lib_path);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        // Clean up archive
-        let _ = std::fs::remove_file(&archive_path);
-        
-        Ok(())
-    }
     /// Create a new ONNX TTS engine
     pub async fn new(cache_dir: PathBuf) -> Result<Self> {
-        // Set environment variables to prevent ONNX Runtime threading deadlocks
-        // These MUST be set before any ort initialization
-        std::env::set_var("OMP_NUM_THREADS", "1");
-        std::env::set_var("MKL_NUM_THREADS", "1");
-        std::env::set_var("OPENBLAS_NUM_THREADS", "1");
-        std::env::set_var("BLIS_NUM_THREADS", "1");
-        
         // 2025 ONNX Fix: Enable float16 optimization to prevent noise output
         std::env::set_var("ORT_ENABLE_FP16", "1");
         std::env::set_var("ORT_DISABLE_ALL_OPTIMIZATIONS", "0");
         
-        tracing::info!("ONNX Engine: Set threading and float16 optimization environment variables");
+        tracing::info!("ONNX Engine: Set float16 optimization environment variables");
         
         // Initialize ONNX Runtime with load-dynamic feature
         // This MUST be called before any ort usage when using load-dynamic
@@ -185,24 +38,10 @@ impl OnnxTtsEngine {
         // Set up cross-platform ONNX Runtime library path
         tracing::info!("ONNX Engine: Setting up cross-platform ONNX Runtime...");
         
-        // Check if system library is already available
-        let system_lib_available = if cfg!(target_os = "windows") {
-            std::env::var("ORT_DYLIB_PATH").is_ok() || std::path::Path::new("onnxruntime.dll").exists()
-        } else if cfg!(target_os = "macos") {
-            std::env::var("ORT_DYLIB_PATH").is_ok() || std::path::Path::new("libonnxruntime.dylib").exists()
-        } else {
-            std::env::var("ORT_DYLIB_PATH").is_ok() || std::path::Path::new("libonnxruntime.so").exists()
-        };
-        
-        if !system_lib_available {
-            tracing::info!("System ONNX Runtime not found, downloading platform-specific version...");
-            let ort_path = Self::ensure_onnx_runtime_available().await?;
-            
-            // Set ORT_DYLIB_PATH environment variable for load-dynamic feature
-            std::env::set_var("ORT_DYLIB_PATH", &ort_path);
-            tracing::info!("Set ORT_DYLIB_PATH to: {}", ort_path);
-        } else {
-            tracing::info!("Using system-provided ONNX Runtime library");
+        // Log ORT_DYLIB_PATH status (should be set by module initialization)
+        match std::env::var("ORT_DYLIB_PATH") {
+            Ok(path) => tracing::info!("ONNX Engine: ORT_DYLIB_PATH is set to: {}", path),
+            Err(_) => tracing::warn!("ONNX Engine: ORT_DYLIB_PATH not set, ort::init() may fail"),
         }
         
         // Initialize ONNX Runtime with load-dynamic feature
@@ -225,6 +64,18 @@ impl OnnxTtsEngine {
             session_pool: None,
             current_model: None,
         })
+    }
+    
+    /// Create a new ONNX TTS engine with cross-platform cache directory
+    pub async fn new_with_default_cache() -> Result<Self> {
+        let proj_dirs = ProjectDirs::from("ai", "Vocalize", "vocalize")
+            .ok_or_else(|| anyhow::anyhow!("Failed to determine project directories"))?;
+        
+        let cache_dir = proj_dirs.cache_dir().join("models");
+        
+        tracing::info!("ONNX Engine: Using cross-platform cache directory: {:?}", cache_dir);
+        
+        Self::new(cache_dir).await
     }
     
     /// Load a specific model for synthesis
@@ -437,6 +288,19 @@ impl OnnxTtsEngine {
         tracing::info!("Creating tensors: {} tokens, {} style values, speed: {}", 
                       tokens_count, style_vector.len(), speed);
         
+        // Add detailed input logging
+        tracing::info!("📊 Input tensor shapes and values:");
+        tracing::info!("  - input_ids: shape=[1, {}], first_10={:?}, last_10={:?}", 
+            input_ids.len(), 
+            &input_ids[..input_ids.len().min(10)],
+            &input_ids[input_ids.len().saturating_sub(10)..]);
+        tracing::info!("  - style_vector: shape=[1, {}], range=[{:.3}, {:.3}], mean={:.3}", 
+            style_vector.len(),
+            style_vector.iter().fold(f32::INFINITY, |a, &b| a.min(b)),
+            style_vector.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)),
+            style_vector.iter().sum::<f32>() / style_vector.len() as f32);
+        tracing::info!("  - speed: {}", speed);
+        
         // Run inference with ONNX Runtime
         tracing::info!("🚀 ONNX Engine: Running inference...");
         let audio_data: Vec<f32> = {
@@ -458,11 +322,29 @@ impl OnnxTtsEngine {
                 .context("Failed to create speed tensor")?;
             attempt_inputs.insert("speed".to_string(), speed_tensor.into());
             
+            // Add logging right before ONNX inference
+            tracing::info!("🚀 [{}] Starting ONNX inference with {} inputs...", 
+                chrono::Local::now().format("%H:%M:%S%.3f"),
+                attempt_inputs.len());
+            for (name, _) in &attempt_inputs {
+                tracing::info!("  - Input tensor: {}", name);
+            }
+            
             // Lock the mutex to get mutable access to the session
+            tracing::info!("🔒 [{}] Attempting to acquire session lock...", 
+                chrono::Local::now().format("%H:%M:%S%.3f"));
             let mut session = session_guard.session.lock()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire session lock: {}", e))?;
+            tracing::info!("✅ [{}] Session lock acquired successfully", 
+                chrono::Local::now().format("%H:%M:%S%.3f"));
+            
+            tracing::info!("🔥 [{}] Calling session.run() now...", 
+                chrono::Local::now().format("%H:%M:%S%.3f"));
             let outputs = session.run(attempt_inputs)
                 .map_err(|e| anyhow::anyhow!("ONNX inference failed: {}", e))?;
+            tracing::info!("✅ [{}] ONNX inference completed successfully", 
+                chrono::Local::now().format("%H:%M:%S%.3f"));
+            tracing::info!("  - Output tensors: {:?}", outputs.keys().collect::<Vec<_>>());
             
             // Extract audio data using ort 2.0.0-rc.10 API
             if let Some(output) = outputs.get("audio") {

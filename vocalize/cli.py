@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 import time
+import platformdirs
 
 # Check if verbose mode is requested early
 _verbose = "--verbose" in sys.argv
@@ -200,7 +201,9 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
         from pathlib import Path
         
         if model == "kokoro":
-            cache_dir = Path.home() / '.vocalize' / 'models' / 'models--direct_download' / 'local'
+            # Use cross-platform cache directory that matches Rust implementation
+            cache_base = platformdirs.user_cache_dir("vocalize", "Vocalize")
+            cache_dir = Path(cache_base) / "models" / "models--direct_download" / "local"
             processor = KokoroPhonemeProcessor(cache_dir)
             
             # Process text to tokens with proper speed

@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use anyhow::{Result, Context};
 use ort::session::Session;
+use directories::ProjectDirs;
 
 use super::types::{ModelId, ModelInfo};
 
@@ -30,6 +31,18 @@ impl ModelManager {
             cache_dir,
             loaded_models: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+    
+    /// Create a new ModelManager with cross-platform cache directory
+    pub fn new_with_default_cache() -> Result<Self> {
+        let proj_dirs = ProjectDirs::from("ai", "Vocalize", "vocalize")
+            .ok_or_else(|| anyhow::anyhow!("Failed to determine project directories"))?;
+        
+        let cache_dir = proj_dirs.cache_dir().join("models");
+        
+        tracing::info!("Using cross-platform cache directory: {:?}", cache_dir);
+        
+        Ok(Self::new(cache_dir))
     }
     
     /// Get the default model info (Kokoro TTS)
@@ -168,9 +181,9 @@ impl ModelManager {
         // Create ONNX session using 2025 optimization settings and threading configuration
         tracing::info!("Loading model {} from Python-managed cache: {:?}", model_info.name, onnx_file);
         let session = Session::builder()?
-            .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level1)?  // 2025 optimization
-            .with_intra_threads(1)?      // Single-threaded intra-op execution
-            .with_inter_threads(1)?      // Single-threaded inter-op execution
+            .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?  // Maximum optimization
+            .with_intra_threads(4)?      // Multi-threaded intra-op execution
+            .with_inter_threads(4)?      // Multi-threaded inter-op execution
             .with_memory_pattern(true)?  // Enable memory pattern optimization
             .commit_from_file(&onnx_file)
             .context(format!("Failed to load ONNX model from {:?}", onnx_file))?;

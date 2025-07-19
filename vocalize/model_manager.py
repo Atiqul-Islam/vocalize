@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+import platformdirs
 
 # Configure HuggingFace Hub for cross-platform compatibility
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
@@ -98,7 +99,13 @@ class ModelManager:
         if cache_dir:
             self.cache_dir = Path(cache_dir)
         else:
-            self.cache_dir = Path.home() / ".vocalize" / "models"
+            # Use cross-platform cache directory that matches Rust implementation
+            # This creates paths like:
+            # Windows: C:\Users\{user}\AppData\Local\Vocalize\vocalize\cache\models
+            # macOS: /Users/{user}/Library/Caches/ai.Vocalize.vocalize/models  
+            # Linux: /home/{user}/.cache/vocalize/models
+            cache_base = platformdirs.user_cache_dir("vocalize", "Vocalize")
+            self.cache_dir = Path(cache_base) / "models"
         
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
@@ -232,11 +239,10 @@ class ModelManager:
             print("Error: requests not available. Install with: uv add requests")
             return False
         
-        # 2025 working model URLs - includes phoneme tokenizer data
+        # 2025 working model URLs
         model_urls = {
             "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
-            "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
-            "phoneme_config.json": "https://raw.githubusercontent.com/hexgrad/Kokoro-82M/main/config.json"  # Phoneme-to-token mapping
+            "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
         }
         
         # Create local directory

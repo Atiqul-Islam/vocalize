@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
+requires = ["maturin>=1.9.0"]
 build-backend = "maturin"
 
 [project]
@@ -33,13 +33,11 @@ dependencies = [
     "sounddevice>=0.4.6",
     "numpy>=1.21.0",
     "huggingface-hub>=0.33.2",
-    "maturin>=1.9.0",
-    "onnx>=1.17.0",
-    "onnxruntime-extensions>=0.14.0",
     "misaki>=0.9.4",
     "num2words>=0.5.14",
     "ttstokenizer>=1.1.0",
     "tinynumpy>=1.2.1",
+    "platformdirs>=4.0.0",
 ]
 
 
@@ -62,7 +60,11 @@ dev = [
     "isort>=5.12",
     "mypy>=1.0",
     "ruff>=0.1",
-    "maturin>=1.7",
+    "maturin>=1.9.0",
+    "cibuildwheel>=2.21.0",  # For automated wheel building with DLL bundling
+    "delvewheel>=1.8.0",  # For Windows DLL bundling
+    "onnx>=1.17.0",
+    "onnxruntime-extensions>=0.14.0",
 ]
 docs = [
     "sphinx>=5.0",
@@ -75,10 +77,11 @@ examples = [
     "numpy>=1.21",
 ]
 
-[tool.maturin]
-module-name = "vocalize.vocalize_python"
-manifest-path = "crates/vocalize-python/Cargo.toml"
-strip = true
+
+# Setuptools configuration for Python packaging
+[tool.setuptools]
+packages = ["vocalize"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["vocalize/tests"]
@@ -186,8 +189,14 @@ ignore = [
 "__init__.py" = ["F401"]
 "tests/**/*" = ["B011"]
 
+# UV configuration to prevent building from source
+[tool.uv]
+package = false  # Don't build this package, use installed wheel instead
+
+# cibuildwheel configuration for automated wheel building
+
 [dependency-groups]
 dev = [
-    "maturin>=1.9.0",
+    "delvewheel>=1.10.0",
 ]
 

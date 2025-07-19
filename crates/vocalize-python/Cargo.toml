@@ -20,7 +20,7 @@ crate-type = ["cdylib"]
 vocalize-core = { path = "../vocalize-core" }
 
 # PyO3 for Python bindings
-pyo3 = { version = "0.20", features = ["extension-module", "abi3-py38"] }
+pyo3 = { version = "0.20", features = ["extension-module", "abi3-py38", "generate-import-lib"] }
 pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
 
 # Async runtime
@@ -40,10 +40,14 @@ pyo3-log = "0.8"
 
 # Utilities
 uuid = { workspace = true }
-dirs = "5.0"
+directories = "5.0"
 
-# ONNX Runtime for 2025 implementation
-ort = "2.0.0-rc.10"
+# ONNX Runtime with load-dynamic for LLVM-built binaries
+ort = { version = "2.0.0-rc.10", features = ["load-dynamic"], default-features = false }
+
+# Windows API for DLL loading
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["libloaderapi", "errhandlingapi", "winbase"] }
 
 [dev-dependencies]
 # Testing

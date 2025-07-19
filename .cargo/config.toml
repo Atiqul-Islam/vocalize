@@ -1,0 +1,24 @@
+# Cross-compilation configuration for Vocalize
+# This file configures Rust builds for cross-platform compilation
+
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"
+rustflags = [
+    "-Lnative=/home/aislam/.cache/cargo-xwin/xwin/crt/lib/x86_64",
+    "-Lnative=/home/aislam/.cache/cargo-xwin/xwin/sdk/lib/um/x86_64",
+    "-Lnative=/home/aislam/.cache/cargo-xwin/xwin/sdk/lib/ucrt/x86_64",
+]
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+
+# Environment variables for cross-compilation
+[env]
+# Use system strategy to use our LLVM-built ONNX Runtime
+ORT_STRATEGY = "system"
+# Point to LLVM-built ONNX Runtime (will be set by build script)
+# ORT_LIB_LOCATION = "path/to/onnxruntime-windows-llvm/lib"
+# Disable DirectML for cross-compilation
+ORT_USE_DIRECTML = "OFF"
+# Cache directory for cargo-xwin
+CARGO_TARGET_DIR = "target"

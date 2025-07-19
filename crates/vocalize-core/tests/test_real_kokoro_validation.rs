@@ -19,11 +19,12 @@ mod real_kokoro_tests {
 
     /// Get the real cache directory where Python downloaded the models
     fn get_real_cache_dir() -> anyhow::Result<PathBuf> {
-        let home_dir = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .map_err(|_| anyhow::anyhow!("Could not determine home directory"))?;
+        use directories::ProjectDirs;
         
-        let cache_dir = PathBuf::from(home_dir).join(".vocalize").join("models");
+        let proj_dirs = ProjectDirs::from("ai", "Vocalize", "vocalize")
+            .ok_or_else(|| anyhow::anyhow!("Failed to determine project directories"))?;
+        
+        let cache_dir = proj_dirs.cache_dir().join("models");
         
         // Verify models exist
         let model_dir = cache_dir.join("models--direct_download").join("local");
