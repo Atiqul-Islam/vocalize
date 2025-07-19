@@ -7,8 +7,9 @@ This comprehensive guide covers development setup, build processes, architecture
 Vocalize is a neural text-to-speech system with:
 - **Rust Core** (`vocalize-core`): High-performance TTS synthesis engine
 - **Python Bindings** (`vocalize-python`): PyO3-based Python API
-- **Cross-compilation**: Build on WSL for Windows deployment
-- **Self-contained**: Bundles all dependencies including ONNX Runtime and VC++ redistributables
+- **Cross-platform**: Native builds for Windows, Linux, and macOS
+- **Self-contained**: Bundles all dependencies including ONNX Runtime
+- **Unified Build Process**: Platform-specific scripts that create bundled wheels
 
 ## Project Structure
 
@@ -31,7 +32,9 @@ vocalize/
 │   ├── _env_setup.py           # Environment setup
 │   ├── cli.py                  # Command-line interface
 │   └── model_manager.py        # Model management
-├── build_and_bundle_complete.sh # WSL build script
+├── build_windows.sh             # Windows build script (WSL)
+├── build_linux.sh              # Linux build script
+├── build_macos.sh              # macOS build script
 └── pyproject.toml              # Python project configuration
 ```
 
@@ -70,6 +73,9 @@ source $HOME/.cargo/env
 
 # Install UV package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install maturin for building Python wheels
+pip install maturin
 ```
 
 #### Build Process
@@ -78,10 +84,24 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/vocalize/vocalize.git
 cd vocalize
 
-# Build and develop
-uv sync --dev
-uv run maturin develop --release
+# Build Linux wheel with bundled ONNX Runtime
+./build_linux.sh
+
+# Sync Python dependencies
+uv sync
+
+# Install the bundled wheel
+uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+
+# Test the installation
+uv run python -m vocalize speak "Hello Linux" --output test.wav
 ```
+
+The Linux build script:
+1. Builds the Rust extension using maturin
+2. Downloads and bundles ONNX Runtime 1.22.0 libraries
+3. Creates a self-contained wheel with all dependencies
+4. Updates wheel metadata for proper installation
 
 ### macOS
 
@@ -100,15 +120,29 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 #### Build Process
 ```bash
-# Detect architecture and build accordingly
-if [[ $(uname -m) == "arm64" ]]; then
-    # Apple Silicon
-    uv run maturin develop --release --target aarch64-apple-darwin
-else
-    # Intel Mac
-    uv run maturin develop --release --target x86_64-apple-darwin
-fi
+# Clone and setup
+git clone https://github.com/vocalize/vocalize.git
+cd vocalize
+
+# Build macOS wheel with bundled ONNX Runtime
+./build_macos.sh
+
+# Sync Python dependencies
+uv sync
+
+# Install the bundled wheel
+uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall
+
+# Test the installation
+uv run python -m vocalize speak "Hello macOS" --output test.wav
 ```
+
+The macOS build script:
+1. Detects your architecture (Intel or Apple Silicon)
+2. Builds the appropriate wheel using maturin
+3. Downloads and bundles ONNX Runtime 1.22.0 libraries
+4. Creates a self-contained wheel with all dependencies
+5. Optionally runs delocate for better compatibility
 
 ### Windows with WSL2 (RECOMMENDED APPROACH)
 
@@ -150,12 +184,12 @@ fi
 cd /mnt/c/Users/[your-username]/Documents/dev/personal/vocalize
 
 # Run the unified build script
-./build_and_bundle_complete.sh
+./build_windows.sh
 ```
 
 This script:
 1. Builds the Rust extension using maturin with the Windows target
-2. Downloads and extracts ONNX Runtime 1.22.1
+2. Downloads and extracts ONNX Runtime 1.22.0
 3. Downloads and bundles VC++ redistributable DLLs
 4. Creates a self-contained wheel with all dependencies
 
@@ -194,13 +228,26 @@ This ensures our bundled DLLs are loaded first, preventing System32 interference
 
 ### Bundled Dependencies
 
-The Windows wheel includes:
-- `onnxruntime.dll` (v1.22.1)
+The bundled wheels include:
+
+**Windows:**
+- `onnxruntime.dll` (v1.22.0)
 - `onnxruntime_providers_shared.dll`
 - VC++ Redistributable DLLs:
   - `vcruntime140.dll`, `vcruntime140_1.dll`
   - `msvcp140.dll`, `msvcp140_1.dll`, `msvcp140_2.dll`
   - `vccorlib140.dll`, `concrt140.dll`
+
+**Linux:**
+- `libonnxruntime.so.1.22.0`
+- `libonnxruntime.so.1` (symlink)
+- `libonnxruntime.so` (symlink)
+- `libonnxruntime_providers_shared.so`
+
+**macOS:**
+- `libonnxruntime.1.22.0.dylib` or `libonnxruntime.dylib`
+- `libonnxruntime.dylib` (symlink if versioned)
+- `libonnxruntime_providers_shared.dylib`
 
 ## Architecture Details
 
@@ -347,12 +394,28 @@ error: PYO3_CONFIG_FILE is set but does not contain a valid config
 
 ### Daily Development Cycle
 
+#### Windows Development
 1. **Make changes** in your preferred editor
-2. **Build on WSL**: `./build_and_bundle_complete.sh`
+2. **Build on WSL**: `./build_windows.sh`
 3. **Install on Windows**: 
    ```powershell
    uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
    ```
+4. **Test**: `uv run python -m vocalize`
+
+#### Linux Development
+1. **Make changes** in your preferred editor
+2. **Build**: `./build_linux.sh`
+3. **Install**: 
+   ```bash
+   uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+   ```
+4. **Test**: `uv run python -m vocalize`
+
+#### macOS Development
+1. **Make changes** in your preferred editor
+2. **Build**: `./build_macos.sh`
+3. **Install**: `uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall`
 4. **Test**: `uv run python -m vocalize`
 
 ### Testing Changes
@@ -464,10 +527,13 @@ uv pip install target/wheels/*.whl --force-reinstall
 
 1. Update version in `crates/vocalize-python/build.rs`:
    ```rust
-   let onnx_version = "1.22.1";  // Change this
+   let onnx_version = "1.22.0";  // Change this
    ```
-2. Test thoroughly for compatibility
-3. Update documentation if needed
+2. Verify the new version has binaries for all platforms:
+   - Check https://github.com/microsoft/onnxruntime/releases
+   - Ensure Windows (.zip), Linux (.tgz), and macOS (.tgz) archives exist
+3. Test thoroughly on all platforms
+4. Update documentation if needed
 
 ### Debugging DLL Issues
 
@@ -486,9 +552,15 @@ RUST_BACKTRACE=1 uv run python -m vocalize
 1. Update version in:
    - All `Cargo.toml` files
    - `pyproject.toml`
-2. Build release wheel: `./build_and_bundle_complete.sh`
-3. Test on clean Windows system
-4. Create GitHub release with changelog
+2. Build release wheels:
+   - Windows: `./build_windows.sh` (on WSL)
+   - Linux: `./build_linux.sh`
+   - macOS: Build on native macOS system
+3. Test on clean systems for each platform
+4. Create GitHub release with:
+   - Platform-specific wheels
+   - Installation instructions per platform
+   - Changelog
 
 ## Getting Help
 
@@ -499,7 +571,7 @@ RUST_BACKTRACE=1 uv run python -m vocalize
    - Error messages and stack traces
    - Steps to reproduce
    - Environment: `rustc --version`, `python --version`
-   - Build output from `./build_and_bundle_complete.sh`
+   - Build output from `./build_windows.sh`
 
 ## Additional Resources
 

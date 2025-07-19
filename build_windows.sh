@@ -1,6 +1,6 @@
 #!/bin/bash
-# Complete build and bundle script for vocalize
-# This script builds the project with maturin and bundles all required DLLs
+# Windows build script for vocalize (runs in WSL)
+# This script builds the Windows wheel with maturin and bundles all required DLLs
 
 set -e
 set -o pipefail

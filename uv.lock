@@ -5759,7 +5759,6 @@ dev = [
     { name = "delvewheel", version = "1.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "isort", version = "5.13.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "isort", version = "6.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
-    { name = "maturin" },
     { name = "mypy", version = "1.14.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "mypy", version = "1.17.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
     { name = "onnx", version = "1.17.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
@@ -5799,6 +5798,7 @@ examples = [
 dev = [
     { name = "delvewheel", version = "1.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "delvewheel", version = "1.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+    { name = "maturin" },
 ]
 
 [package.metadata]
@@ -5810,7 +5810,6 @@ requires-dist = [
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12" },
     { name = "jupyter", marker = "extra == 'examples'", specifier = ">=1.0" },
     { name = "matplotlib", marker = "extra == 'examples'", specifier = ">=3.5" },
-    { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.9.0" },
     { name = "misaki", specifier = ">=0.9.4" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = ">=0.18" },
@@ -5834,7 +5833,10 @@ requires-dist = [
 provides-extras = ["dev", "docs", "examples"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "delvewheel", specifier = ">=1.10.0" }]
+dev = [
+    { name = "delvewheel", specifier = ">=1.10.0" },
+    { name = "maturin", specifier = ">=1.9.1" },
+]
 
 [[package]]
 name = "wcwidth"

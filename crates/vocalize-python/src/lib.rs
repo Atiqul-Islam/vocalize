@@ -321,6 +321,58 @@ fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         }
     }
     
+    // Set up ONNX Runtime library path for Linux
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("ORT_DYLIB_PATH").is_err() {
+            // Get the site-packages path
+            let sys = _py.import("sys")?;
+            let prefix: String = sys.getattr("prefix")?.extract()?;
+            
+            // Build the path to our bundled library
+            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_python/libonnxruntime.so", 
+                prefix, 
+                sys.getattr("version_info")?.getattr("major")?.extract::<i32>()?,
+                sys.getattr("version_info")?.getattr("minor")?.extract::<i32>()?
+            );
+            
+            // Check if the library exists
+            if std::path::Path::new(&lib_path).exists() {
+                std::env::set_var("ORT_DYLIB_PATH", &lib_path);
+                eprintln!("✅ Set ORT_DYLIB_PATH to: {}", lib_path);
+            } else {
+                eprintln!("⚠️  ONNX Runtime library not found at: {}", lib_path);
+                eprintln!("   Will attempt to use system ONNX Runtime if available");
+            }
+        }
+    }
+    
+    // Set up ONNX Runtime library path for macOS
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var("ORT_DYLIB_PATH").is_err() {
+            // Get the site-packages path
+            let sys = _py.import("sys")?;
+            let prefix: String = sys.getattr("prefix")?.extract()?;
+            
+            // Build the path to our bundled library
+            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_python/libonnxruntime.dylib", 
+                prefix,
+                sys.getattr("version_info")?.getattr("major")?.extract::<i32>()?,
+                sys.getattr("version_info")?.getattr("minor")?.extract::<i32>()?
+            );
+            
+            // Check if the library exists
+            if std::path::Path::new(&lib_path).exists() {
+                std::env::set_var("ORT_DYLIB_PATH", &lib_path);
+                eprintln!("✅ Set ORT_DYLIB_PATH to: {}", lib_path);
+            } else {
+                eprintln!("⚠️  ONNX Runtime library not found at: {}", lib_path);
+                eprintln!("   Will attempt to use system ONNX Runtime if available");
+            }
+        }
+    }
+    
     // Initialize logging
     pyo3_log::init();
 

@@ -122,10 +122,11 @@ uv run python -m vocalize.cli config list
 
 ## Architecture
 
-- **Rust Backend**: High-performance TTS synthesis with formant-based speech generation
+- **Rust Backend**: High-performance TTS synthesis with neural models
 - **Python Frontend**: User-friendly CLI with cross-platform compatibility
-- **Self-contained**: Custom WAV writer, no external audio dependencies for synthesis
+- **Self-contained**: Bundles all dependencies including ONNX Runtime
 - **UV Managed**: Modern Python package management
+- **Platform-specific builds**: Native wheels for Windows, Linux, and macOS
 
 ## Requirements
 
@@ -145,22 +146,42 @@ For detailed development setup and build instructions, see [DEVELOPMENT.md](DEVE
 **Prerequisites:**
 - Python 3.8+ with UV package manager
 - Rust toolchain
-- WSL2 (for Windows development)
-- 7-Zip (for WSL)
+- Platform-specific requirements:
+  - **Windows**: WSL2 with 7-Zip
+  - **Linux**: build-essential
+  - **macOS**: Xcode Command Line Tools
 
-**Building on WSL (for Windows):**
+#### Building on Windows (via WSL)
 ```bash
 # In WSL terminal
 cd /mnt/c/Users/[your-username]/Documents/dev/personal/vocalize
-./build_and_bundle_complete.sh
-```
+./build_windows.sh
 
-**Installing on Windows:**
-```powershell
 # In Windows terminal
-cd C:\Users\[your-username]\Documents\dev\personal\vocalize
 uv sync
 uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
+uv run python -m vocalize
+```
+
+#### Building on Linux
+```bash
+# Build wheel with bundled dependencies
+./build_linux.sh
+
+# Install
+uv sync
+uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+uv run python -m vocalize
+```
+
+#### Building on macOS
+```bash
+# Build wheel with bundled dependencies
+./build_macos.sh
+
+# Install
+uv sync
+uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall
 uv run python -m vocalize
 ```
 
