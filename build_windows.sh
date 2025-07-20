@@ -50,7 +50,7 @@ check_prerequisites() {
     fi
     
     # Check if in project root
-    if [ ! -f "pyproject.toml" ] || [ ! -d "crates/vocalize-python" ]; then
+    if [ ! -f "pyproject.toml" ] || [ ! -d "crates/vocalize-rust" ]; then
         print_error "This script must be run from the vocalize project root directory"
         exit 1
     fi
@@ -111,14 +111,14 @@ if [ "$SKIP_BUILD" = false ]; then
     echo "========================================="
     
     # Clean previous builds
-    rm -rf target/wheels/*.whl
+    rm -rf crates/target/wheels/*.whl
     
     # Build with maturin (without PYO3_CONFIG_FILE since it works without it)
     print_warning "Building for target: x86_64-pc-windows-msvc with $PYTHON_VERSION"
     maturin build \
         --release \
         --target x86_64-pc-windows-msvc \
-        --manifest-path crates/vocalize-python/Cargo.toml \
+        --manifest-path crates/vocalize-rust/Cargo.toml \
         --interpreter "$PYTHON_VERSION"
     
     if [ $? -ne 0 ]; then
@@ -127,7 +127,7 @@ if [ "$SKIP_BUILD" = false ]; then
     fi
     
     # Find the built wheel
-    WHEEL_PATH=$(find target/wheels -name "*.whl" -type f | sort -r | head -1)
+    WHEEL_PATH=$(find crates/target/wheels -name "*.whl" -type f | sort -r | head -1)
 else
     echo ""
     echo "Step 1: Skipping build (using existing wheel)"
@@ -135,7 +135,7 @@ else
     
     # If no wheel specified, try to find one
     if [ -z "$WHEEL_PATH" ]; then
-        WHEEL_PATH=$(find target/wheels -name "*.whl" -type f ! -name "*_bundled.whl" | sort -r | head -1)
+        WHEEL_PATH=$(find crates/target/wheels -name "*.whl" -type f ! -name "*_bundled.whl" | sort -r | head -1)
         if [ -n "$WHEEL_PATH" ]; then
             echo "Found existing wheel: $(basename "$WHEEL_PATH")"
         fi
@@ -223,9 +223,9 @@ python3 -m zipfile -e "$WHEEL_PATH" . || {
 }
 
 # Find the package directory
-PACKAGE_DIR=$(find . -type d -name "vocalize_python" | head -1)
+PACKAGE_DIR=$(find . -type d -name "vocalize_rust" | head -1)
 if [ -z "$PACKAGE_DIR" ]; then
-    print_error "vocalize_python directory not found in wheel"
+    print_error "vocalize_rust directory not found in wheel"
     exit 1
 fi
 
@@ -238,8 +238,8 @@ ONNX_COPIED=0
 
 # Try multiple possible locations
 ONNX_SEARCH_DIRS=(
-    "$PROJECT_DIR/target/x86_64-pc-windows-msvc/release/build/vocalize-python-*/out/onnxruntime/lib"
-    "$PROJECT_DIR/crates/vocalize-python/target/x86_64-pc-windows-msvc/release/build/vocalize-python-*/out/onnxruntime/lib"
+    "$PROJECT_DIR/crates/target/x86_64-pc-windows-msvc/release/build/vocalize-rust-*/out/onnxruntime/lib"
+    "$PROJECT_DIR/target/x86_64-pc-windows-msvc/release/build/vocalize-rust-*/out/onnxruntime/lib"
 )
 
 for pattern in "${ONNX_SEARCH_DIRS[@]}"; do
@@ -297,7 +297,7 @@ echo "========================================="
 # Generate new wheel name
 WHEEL_NAME=$(basename "$WHEEL_PATH")
 WHEEL_BASE="${WHEEL_NAME%.whl}"
-NEW_WHEEL_PATH="$PROJECT_DIR/target/wheels/${WHEEL_BASE}_bundled.whl"
+NEW_WHEEL_PATH="$PROJECT_DIR/crates/target/wheels/${WHEEL_BASE}_bundled.whl"
 
 # Create the new wheel
 echo "Creating wheel: $(basename "$NEW_WHEEL_PATH")"

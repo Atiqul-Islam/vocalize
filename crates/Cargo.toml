@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/vocalize-core",
-    "crates/vocalize-python",
+    "vocalize-core",
+    "vocalize-rust",
 ]
 
 [workspace.package]

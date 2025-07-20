@@ -1,5 +1,5 @@
 [package]
-name = "vocalize-python"
+name = "vocalize-rust"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ categories.workspace = true
 description = "Python bindings for Vocalize - high-performance text-to-speech synthesis"
 
 [lib]
-name = "vocalize_python"
+name = "vocalize_rust"
 crate-type = ["cdylib"]
 
 [dependencies]

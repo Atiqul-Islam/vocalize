@@ -16,11 +16,11 @@ __description__ = "High-performance text-to-speech synthesis library"
 
 # Try to import Rust bindings, fall back to Python-only implementation
 try:
-    import vocalize_python
+    import vocalize_rust
     _HAS_RUST_BINDINGS = True
     
     # Export main classes from Rust bindings
-    from vocalize_python import (
+    from vocalize_rust import (
         TtsEngine, SynthesisParams, Voice, VoiceManager, AudioWriter, AudioDevice,
         VocalizeError, Gender, VoiceStyle
     )

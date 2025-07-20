@@ -256,8 +256,8 @@ class VoiceManager:
         """Get default voice for a model from Rust backend"""
         try:
             # Import and use the Rust voice manager to get the true default
-            import vocalize_python
-            rust_voice_manager = vocalize_python.VoiceManager()
+            import vocalize_rust
+            rust_voice_manager = vocalize_rust.VoiceManager()
             default_voice = rust_voice_manager.get_default_voice()
             return default_voice.id
         except Exception as e:

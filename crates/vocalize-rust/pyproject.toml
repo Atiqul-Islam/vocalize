@@ -3,7 +3,7 @@ requires = ["maturin>=1.9.0"]
 build-backend = "maturin"
 
 [project]
-name = "vocalize-python"
+name = "vocalize-rust"
 version = "0.1.0"
 description = "Python bindings for Vocalize - high-performance text-to-speech synthesis"
 requires-python = ">=3.8"
@@ -25,4 +25,4 @@ classifiers = [
 
 [tool.maturin]
 # Module name configuration
-module-name = "vocalize_python"
+module-name = "vocalize_rust"

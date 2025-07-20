@@ -112,12 +112,12 @@ class VocalizeComponents:
             print(f"✅ Model '{model_id}' is ready")
             
             # Import the Rust neural TTS bindings
-            from . import vocalize_python
-            print("DEBUG: Successfully imported vocalize_python")
+            from . import vocalize_rust
+            print("DEBUG: Successfully imported vocalize_rust")
             
             # Use neural ONNX TTS engine for synthesis (Rust loads from Python-managed cache)
-            print("DEBUG: Calling vocalize_python.synthesize_neural()...")
-            samples = vocalize_python.synthesize_neural(text, voice, speed, pitch)
+            print("DEBUG: Calling vocalize_rust.synthesize_neural()...")
+            samples = vocalize_rust.synthesize_neural(text, voice, speed, pitch)
             print(f"✅ Got {len(samples)} audio samples from neural synthesis")
             
             return VocalizeComponents.AudioData(samples)
@@ -154,8 +154,8 @@ class VocalizeComponents:
         """Save audio to file using Rust backend."""
         try:
             # Use Rust backend for high-quality audio writing
-            from . import vocalize_python
-            vocalize_python.save_audio_neural(audio_data.samples, output_path, format)
+            from . import vocalize_rust
+            vocalize_rust.save_audio_neural(audio_data.samples, output_path, format)
             print(f"Saved neural TTS audio to {output_path} in {format} format")
         except (ImportError, ModuleNotFoundError) as e:
             print(f"Error: Neural audio writer not available ({e}).")
@@ -213,17 +213,17 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
             print(f"📝 Generated {len(result['input_ids'])} tokens for synthesis")
             
             # Import the Rust neural TTS bindings
-            from . import vocalize_python
-            print("DEBUG: Successfully imported vocalize_python for token synthesis")
+            from . import vocalize_rust
+            print("DEBUG: Successfully imported vocalize_rust for token synthesis")
             
             # Use token-based neural synthesis
-            print("DEBUG: Calling vocalize_python.synthesize_from_tokens_neural()...")
+            print("DEBUG: Calling vocalize_rust.synthesize_from_tokens_neural()...")
             print(f"DEBUG: input_ids length: {len(result['input_ids'])}")
             print(f"DEBUG: style vector length: {len(result['style'])}")
             print(f"DEBUG: style vector range: [{min(result['style']):.3f}, {max(result['style']):.3f}]")
             print(f"DEBUG: speed: {result['speed']}")
             
-            samples = vocalize_python.synthesize_from_tokens_neural(
+            samples = vocalize_rust.synthesize_from_tokens_neural(
                 result['input_ids'],
                 result['style'],
                 result['speed'],

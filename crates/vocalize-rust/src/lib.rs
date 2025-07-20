@@ -225,7 +225,7 @@ fn save_audio_neural(audio_data: Vec<f32>, output_path: String, format: Option<S
 
 /// Python module for Vocalize TTS functionality
 #[pymodule]
-fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     // Set up ONNX Runtime DLL path IMMEDIATELY on module load
     // This must happen before ANY ort code is touched
     #[cfg(target_os = "windows")]
@@ -240,7 +240,7 @@ fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             // Get the site-packages path
             let sys = _py.import("sys")?;
             let prefix: String = sys.getattr("prefix")?.extract()?;
-            let dll_dir = format!("{}\\Lib\\site-packages\\vocalize_python", prefix);
+            let dll_dir = format!("{}\\Lib\\site-packages\\vocalize_rust", prefix);
             
             // First, check if System32 has a conflicting version
             let system32_dll = "C:\\Windows\\System32\\onnxruntime.dll";
@@ -336,7 +336,7 @@ fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             let prefix: String = sys.getattr("prefix")?.extract()?;
             
             // Build the path to our bundled library
-            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_python/libonnxruntime.so", 
+            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_rust/libonnxruntime.so", 
                 prefix, 
                 sys.getattr("version_info")?.getattr("major")?.extract::<i32>()?,
                 sys.getattr("version_info")?.getattr("minor")?.extract::<i32>()?
@@ -362,7 +362,7 @@ fn vocalize_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             let prefix: String = sys.getattr("prefix")?.extract()?;
             
             // Build the path to our bundled library
-            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_python/libonnxruntime.dylib", 
+            let lib_path = format!("{}/lib/python{}.{}/site-packages/vocalize_rust/libonnxruntime.dylib", 
                 prefix,
                 sys.getattr("version_info")?.getattr("major")?.extract::<i32>()?,
                 sys.getattr("version_info")?.getattr("minor")?.extract::<i32>()?

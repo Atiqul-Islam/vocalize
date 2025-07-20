@@ -23,8 +23,8 @@ cd "$PROJECT_DIR"
 
 # Clean previous builds
 print_info "Cleaning previous Linux builds..."
-rm -rf target/wheels/vocalize_python-*-manylinux*.whl 2>/dev/null || true
-rm -rf target/wheels/vocalize_python-*-linux*.whl 2>/dev/null || true
+rm -rf crates/target/wheels/vocalize_rust-*-manylinux*.whl 2>/dev/null || true
+rm -rf crates/target/wheels/vocalize_rust-*-linux*.whl 2>/dev/null || true
 
 # Step 1: Build the wheel with maturin
 echo ""
@@ -32,16 +32,16 @@ echo "Step 1: Building wheel with maturin..."
 echo "========================================="
 
 maturin build --release \
-    --manifest-path crates/vocalize-python/Cargo.toml \
+    --manifest-path crates/vocalize-rust/Cargo.toml \
     --interpreter python3.10 || {
     print_error "Failed to build wheel with maturin"
     exit 1
 }
 
 # Find the built wheel
-WHEEL_FILE=$(ls target/wheels/vocalize_python-*-manylinux*.whl 2>/dev/null | head -1)
+WHEEL_FILE=$(ls crates/target/wheels/vocalize_rust-*-manylinux*.whl 2>/dev/null | head -1)
 if [ -z "$WHEEL_FILE" ]; then
-    WHEEL_FILE=$(ls target/wheels/vocalize_python-*-linux*.whl 2>/dev/null | head -1)
+    WHEEL_FILE=$(ls crates/target/wheels/vocalize_rust-*-linux*.whl 2>/dev/null | head -1)
 fi
 
 if [ -z "$WHEEL_FILE" ]; then
@@ -57,10 +57,10 @@ echo "Step 2: Locating ONNX Runtime libraries..."
 echo "========================================="
 
 # Find ONNX Runtime library from build directory
-ONNX_LIB_DIR=$(find target -path "*/build/vocalize-python-*/out/onnxruntime/lib" -type d 2>/dev/null | head -1)
+ONNX_LIB_DIR=$(find crates/target -path "*/build/vocalize-rust-*/out/onnxruntime/lib" -type d 2>/dev/null | head -1)
 if [ -z "$ONNX_LIB_DIR" ]; then
     print_error "ONNX Runtime library directory not found in build artifacts!"
-    print_info "Looking for pattern: target/*/build/vocalize-python-*/out/onnxruntime/lib"
+    print_info "Looking for pattern: crates/target/*/build/vocalize-rust-*/out/onnxruntime/lib"
     exit 1
 fi
 
@@ -91,9 +91,9 @@ python3 -m zipfile -e "$PROJECT_DIR/$WHEEL_FILE" . || {
 }
 
 # Find the package directory
-PACKAGE_DIR=$(find . -type d -name "vocalize_python" | head -1)
+PACKAGE_DIR=$(find . -type d -name "vocalize_rust" | head -1)
 if [ -z "$PACKAGE_DIR" ]; then
-    print_error "vocalize_python directory not found in wheel"
+    print_error "vocalize_rust directory not found in wheel"
     cd "$PROJECT_DIR"
     rm -rf "$TEMP_DIR"
     exit 1
@@ -181,7 +181,7 @@ for lib in libs_to_add:
             size = len(data)
         
         # Add to records
-        record_path = os.path.join('vocalize_python', lib).replace(os.sep, '/')
+        record_path = os.path.join('vocalize_rust', lib).replace(os.sep, '/')
         records.append([record_path, f'sha256={hash_b64}', str(size)])
         print(f'Added {lib} to RECORD')
 
@@ -227,7 +227,7 @@ echo "✨ Build Summary"
 echo "================"
 echo "Original wheel: $(basename "$WHEEL_FILE")"
 echo "Bundled wheel:  $BUNDLED_WHEEL_NAME"
-echo "Location:       target/wheels/"
+echo "Location:       crates/target/wheels/"
 echo ""
 echo "📦 Bundled libraries:"
 echo "  - libonnxruntime.so.1.22.0"

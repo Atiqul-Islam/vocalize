@@ -159,7 +159,7 @@ cd /mnt/c/Users/[your-username]/Documents/dev/personal/vocalize
 
 # In Windows terminal
 uv sync
-uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
+uv pip install crates/target/wheels/vocalize_rust-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
 uv run python -m vocalize
 ```
 
@@ -170,7 +170,7 @@ uv run python -m vocalize
 
 # Install
 uv sync
-uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall --python-platform linux
 uv run python -m vocalize
 ```
 
@@ -181,7 +181,7 @@ uv run python -m vocalize
 
 # Install
 uv sync
-uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall
+uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall
 uv run python -m vocalize
 ```
 

@@ -6,7 +6,7 @@ This comprehensive guide covers development setup, build processes, architecture
 
 Vocalize is a neural text-to-speech system with:
 - **Rust Core** (`vocalize-core`): High-performance TTS synthesis engine
-- **Python Bindings** (`vocalize-python`): PyO3-based Python API
+- **Python Bindings** (`vocalize-rust`): PyO3-based Python API
 - **Cross-platform**: Native builds for Windows, Linux, and macOS
 - **Self-contained**: Bundles all dependencies including ONNX Runtime
 - **Unified Build Process**: Platform-specific scripts that create bundled wheels
@@ -22,7 +22,7 @@ vocalize/
 │   │   │   ├── onnx_engine.rs  # ONNX Runtime integration
 │   │   │   └── model/          # Neural model implementations
 │   │   └── Cargo.toml
-│   └── vocalize-python/        # Python bindings
+│   └── vocalize-rust/          # Python bindings
 │       ├── src/
 │       │   └── lib.rs          # PyO3 module with DLL loading
 │       ├── build.rs            # Build script for ONNX Runtime
@@ -91,7 +91,7 @@ cd vocalize
 uv sync
 
 # Install the bundled wheel
-uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall --python-platform linux
 
 # Test the installation
 uv run python -m vocalize speak "Hello Linux" --output test.wav
@@ -131,7 +131,7 @@ cd vocalize
 uv sync
 
 # Install the bundled wheel
-uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall
+uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall
 
 # Test the installation
 uv run python -m vocalize speak "Hello macOS" --output test.wav
@@ -202,7 +202,7 @@ cd C:\Users\[your-username]\Documents\dev\personal\vocalize
 uv sync
 
 # Install the bundled wheel
-uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
+uv pip install crates/target/wheels/vocalize_rust-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
 
 # Test the installation
 uv run python -m vocalize
@@ -216,7 +216,7 @@ Windows may have an incompatible ONNX Runtime version in System32 (commonly v1.1
 
 ### Our Solution: Pre-emptive DLL Loading
 
-We implement pre-emptive DLL loading in `vocalize-python/src/lib.rs`:
+We implement pre-emptive DLL loading in `vocalize-rust/src/lib.rs`:
 
 ```rust
 // Pre-load our DLLs using Windows API before ort crate initializes
@@ -315,7 +315,7 @@ Need a Python interpreter to compile for Windows without PyO3's `generate-import
 
 **Solutions:**
 1. **Enable generate-import-lib** (Recommended):
-   - Already configured in `crates/vocalize-python/Cargo.toml`
+   - Already configured in `crates/vocalize-rust/Cargo.toml`
    - Uses PyO3's automatic import library generation
 
 2. **Specify Python interpreter path:**
@@ -362,7 +362,7 @@ lld-link: error: could not open 'DirectML.lib': No such file or directory
 # Cargo.toml files use default-features = false for ORT
 
 # Build with cargo-xwin (recommended)
-cargo xwin build --release --target x86_64-pc-windows-msvc --manifest-path crates/vocalize-python/Cargo.toml
+cargo xwin build --release --target x86_64-pc-windows-msvc --manifest-path crates/vocalize-rust/Cargo.toml
 
 # Or use maturin directly
 maturin build --release --target x86_64-pc-windows-msvc
@@ -399,7 +399,7 @@ error: PYO3_CONFIG_FILE is set but does not contain a valid config
 2. **Build on WSL**: `./build_windows.sh`
 3. **Install on Windows**: 
    ```powershell
-   uv pip install target/wheels/vocalize_python-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
+   uv pip install crates/target/wheels/vocalize_rust-0.1.0-cp38-abi3-win_amd64_bundled.whl --force-reinstall
    ```
 4. **Test**: `uv run python -m vocalize`
 
@@ -408,14 +408,14 @@ error: PYO3_CONFIG_FILE is set but does not contain a valid config
 2. **Build**: `./build_linux.sh`
 3. **Install**: 
    ```bash
-   uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall --python-platform linux
+   uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall --python-platform linux
    ```
 4. **Test**: `uv run python -m vocalize`
 
 #### macOS Development
 1. **Make changes** in your preferred editor
 2. **Build**: `./build_macos.sh`
-3. **Install**: `uv pip install target/wheels/vocalize_python-*_bundled.whl --force-reinstall`
+3. **Install**: `uv pip install crates/target/wheels/vocalize_rust-*_bundled.whl --force-reinstall`
 4. **Test**: `uv run python -m vocalize`
 
 ### Testing Changes
@@ -508,7 +508,7 @@ uv run maturin develop --release
 uv run maturin build --release
 
 # Install wheel
-uv pip install target/wheels/*.whl --force-reinstall
+uv pip install crates/target/wheels/*.whl --force-reinstall
 ```
 
 ## Common Development Tasks
@@ -525,7 +525,7 @@ uv pip install target/wheels/*.whl --force-reinstall
 
 ### Updating ONNX Runtime
 
-1. Update version in `crates/vocalize-python/build.rs`:
+1. Update version in `crates/vocalize-rust/build.rs`:
    ```rust
    let onnx_version = "1.22.0";  // Change this
    ```
