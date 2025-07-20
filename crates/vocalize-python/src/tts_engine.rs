@@ -191,6 +191,20 @@ impl PyTtsEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::voice_manager::{PyVoice, PyGender, PyVoiceStyle};
+    use vocalize_core::{Voice, Gender, VoiceStyle};
+    
+    // Helper function to create a test voice since Voice::default() is no longer available
+    fn create_test_voice() -> PyVoice {
+        let voice = Voice::new(
+            "af_alloy".to_string(),
+            "Alloy".to_string(),
+            "en-US".to_string(),
+            Gender::Male,
+            VoiceStyle::Natural,
+        );
+        PyVoice::new(voice)
+    }
     use crate::voice_manager::{PyGender, PyVoiceStyle};
 
     #[test]
@@ -254,14 +268,14 @@ mod tests {
 
     #[test]
     fn test_py_synthesis_params_to_dict() {
-        let voice = PyVoice::default();
+        let voice = create_test_voice();
         let params = PySynthesisParams::py_new(voice)
             .with_speed(1.2).unwrap()
             .with_pitch(0.1).unwrap()
             .with_streaming(512);
         
         let dict = params.to_dict();
-        assert_eq!(dict.get("voice_id"), Some(&"af_bella".to_string()));
+        assert_eq!(dict.get("voice_id"), Some(&"af_alloy".to_string()));
         assert_eq!(dict.get("speed"), Some(&"1.2".to_string()));
         assert_eq!(dict.get("pitch"), Some(&"0.1".to_string()));
         assert_eq!(dict.get("streaming_chunk_size"), Some(&"512".to_string()));
@@ -269,12 +283,12 @@ mod tests {
 
     #[test]
     fn test_py_synthesis_params_repr() {
-        let voice = PyVoice::default();
+        let voice = create_test_voice();
         let params = PySynthesisParams::py_new(voice);
         let repr = params.__repr__();
         
         assert!(repr.contains("SynthesisParams"));
-        assert!(repr.contains("af_bella"));
+        assert!(repr.contains("af_alloy"));
     }
 
     #[test]
@@ -287,7 +301,7 @@ mod tests {
     #[test]
     fn test_py_tts_engine_synthesize() {
         let engine = PyTtsEngine::py_new().unwrap();
-        let voice = PyVoice::default();
+        let voice = create_test_voice();
         let params = PySynthesisParams::py_new(voice);
         
         let result = engine.synthesize_sync("Hello".to_string(), &params);

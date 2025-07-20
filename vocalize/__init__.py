@@ -46,7 +46,8 @@ except ImportError:
         
         @staticmethod
         def default():
-            return Voice("af_bella", "Bella", "en-US", "female", "natural")
+            # Python decides the default voice, not Rust
+            return Voice("af_alloy", "Alloy", "en-US", "male", "natural")
     
     class SynthesisParams:
         """Mock SynthesisParams class."""

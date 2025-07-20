@@ -12,8 +12,14 @@ async fn test_full_tts_pipeline() {
     // Create TTS engine
     let engine = TtsEngine::new().await.expect("Should create TTS engine");
     
-    // Create voice
-    let voice = Voice::default();
+    // Create voice - use explicit voice since Voice::default() is no longer available
+    let voice = Voice::new(
+        "af_alloy".to_string(),
+        "Alloy".to_string(),
+        "en-US".to_string(),
+        Gender::Male,
+        VoiceStyle::Natural,
+    );
     let params = SynthesisParams::new(voice);
     
     // Synthesize audio
@@ -33,9 +39,9 @@ async fn test_voice_manager_integration() {
     assert!(!voices.is_empty());
     
     // Test getting voice by ID
-    let voice = manager.get_voice("af_bella").expect("Should find bella voice");
-    assert_eq!(voice.id, "af_bella");
-    assert_eq!(voice.gender, Gender::Female);
+    let voice = manager.get_voice("af_alloy").expect("Should find alloy voice");
+    assert_eq!(voice.id, "af_alloy");
+    assert_eq!(voice.gender, Gender::Male);
     
     // Test filtering by language
     let en_voices = manager.get_voices_by_language("en-US");
@@ -91,7 +97,13 @@ fn test_voice_configuration() {
 
 #[test]
 fn test_synthesis_params_configuration() {
-    let voice = Voice::default();
+    let voice = Voice::new(
+        "test_voice".to_string(),
+        "Test Voice".to_string(),
+        "en-US".to_string(),
+        Gender::Male,
+        VoiceStyle::Natural,
+    );
     let params = SynthesisParams::new(voice)
         .with_speed(1.5).expect("Valid speed")
         .with_pitch(0.2).expect("Valid pitch")
@@ -141,7 +153,13 @@ fn test_audio_format_detection() {
 #[tokio::test]
 async fn test_tts_engine_streaming() {
     let engine = TtsEngine::new().await.expect("Should create TTS engine");
-    let voice = Voice::default();
+    let voice = Voice::new(
+        "test_voice".to_string(),
+        "Test Voice".to_string(),
+        "en-US".to_string(),
+        Gender::Male,
+        VoiceStyle::Natural,
+    );
     let params = SynthesisParams::new(voice).with_streaming(512);
     
     // Test streaming synthesis
@@ -180,7 +198,13 @@ async fn test_tts_engine_different_voices() {
 #[tokio::test]
 async fn test_error_handling() {
     let engine = TtsEngine::new().await.expect("Should create TTS engine");
-    let voice = Voice::default();
+    let voice = Voice::new(
+        "test_voice".to_string(),
+        "Test Voice".to_string(),
+        "en-US".to_string(),
+        Gender::Male,
+        VoiceStyle::Natural,
+    );
     
     // Test empty text error
     let params = SynthesisParams::new(voice.clone());

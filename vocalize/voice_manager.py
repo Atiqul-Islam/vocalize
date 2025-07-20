@@ -33,9 +33,8 @@ VOICE_ALIASES = {
     "fenrir": "am_fenrir",
     "puck": "am_puck",
     # Additional common aliases
-    "female": "af_sarah",
+    "female": "af_nova",
     "male": "am_adam",
-    "default": "af_sarah",
 }
 
 try:
@@ -254,24 +253,23 @@ class VoiceManager:
             raise RuntimeError(f"Failed to load voice embedding: {e}")
     
     def get_default_voice(self, model_id: str) -> Optional[str]:
-        """Get default voice for a model"""
-        voices = self.discover_voices(model_id)
-        if not voices:
+        """Get default voice for a model from Rust backend"""
+        try:
+            # Import and use the Rust voice manager to get the true default
+            import vocalize_python
+            rust_voice_manager = vocalize_python.VoiceManager()
+            default_voice = rust_voice_manager.get_default_voice()
+            return default_voice.id
+        except Exception as e:
+            # Fallback: if Rust backend isn't available, return None
+            print(f"Warning: Could not get default voice from Rust backend: {e}")
             return None
-        
-        # Prefer female voices as default
-        for voice in voices:
-            if 'female' in voice.gender.lower() or 'f' in voice.id.lower():
-                return voice.id
-        
-        # Return first available voice
-        return voices[0].id
     
     def _parse_voice_name(self, voice_id: str) -> str:
         """Parse human-readable voice name from ID"""
         # Handle common voice ID patterns
         name_mappings = {
-            'af_alloy': 'Alloy (Female)',
+            'af_alloy': 'Alloy (Male)',
             'af_bella': 'Bella (Female)', 
             'af_nova': 'Nova (Female)',
             'af_aoede': 'Aoede (Female)',
@@ -301,6 +299,11 @@ class VoiceManager:
     def _parse_gender(self, voice_id: str) -> str:
         """Parse gender from voice ID"""
         voice_lower = voice_id.lower()
+        
+        # Special case: af_alloy is male despite af_ prefix
+        if voice_lower == 'af_alloy':
+            return 'male'
+        
         if voice_lower.startswith('af_') or 'female' in voice_lower:
             return 'female'
         elif voice_lower.startswith('am_') or 'male' in voice_lower:

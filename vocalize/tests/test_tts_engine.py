@@ -93,7 +93,7 @@ class TestSynthesisParams:
         repr_str = repr(params)
         
         assert "SynthesisParams(" in repr_str
-        assert "af_bella" in repr_str
+        assert "af_alloy" in repr_str
         
     def test_synthesis_params_to_dict(self):
         """Test synthesis params to dict."""
@@ -102,7 +102,7 @@ class TestSynthesisParams:
         
         data = params.to_dict()
         assert isinstance(data, dict)
-        assert data["voice_id"] == "af_bella"
+        assert data["voice_id"] == "af_alloy"
         assert data["speed"] == "1.2"
         assert data["pitch"] == "0.1"
         assert data["streaming_chunk_size"] == "512"

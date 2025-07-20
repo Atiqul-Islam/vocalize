@@ -201,14 +201,8 @@ impl Voice {
 
 impl Default for Voice {
     fn default() -> Self {
-        Self::new(
-            "af_bella".to_string(),
-            "Bella".to_string(),
-            "en-US".to_string(),
-            Gender::Female,
-            VoiceStyle::Natural,
-        )
-        .with_description("Young, friendly female voice".to_string())
+        // Rust doesn't handle voice loading - Python must provide voice details
+        panic!("Voice::default() should not be used. Python frontend must provide voice information.")
     }
 }
 
@@ -227,13 +221,13 @@ impl VoiceManager {
         // Add default Kokoro voices
         let default_voices = [
             Voice::new(
-                "af_bella".to_string(),
-                "Bella".to_string(),
+                "af_alloy".to_string(),
+                "Alloy".to_string(),
                 "en-US".to_string(),
-                Gender::Female,
+                Gender::Male,
                 VoiceStyle::Natural,
             )
-            .with_description("Young, friendly female voice".to_string()),
+            .with_description("Natural male voice".to_string()),
             Voice::new(
                 "am_david".to_string(),
                 "David".to_string(),
@@ -355,8 +349,8 @@ impl VoiceManager {
     /// Get the default voice
     #[must_use]
     pub fn get_default_voice(&self) -> Voice {
-        self.get_voice("af_bella")
-            .unwrap_or_else(|_| Voice::default())
+        // Rust doesn't decide default voices - Python must provide voice selection
+        panic!("VoiceManager::get_default_voice() should not be used. Python frontend must provide voice selection.")
     }
 
     /// Get voice count
@@ -574,13 +568,10 @@ mod tests {
     }
 
     #[test]
-    fn test_voice_default() {
-        let voice = Voice::default();
-        assert_eq!(voice.id, "af_bella");
-        assert_eq!(voice.name, "Bella");
-        assert_eq!(voice.language, "en-US");
-        assert_eq!(voice.gender, Gender::Female);
-        assert_eq!(voice.style, VoiceStyle::Natural);
+    #[should_panic(expected = "Voice::default() should not be used")]
+    fn test_voice_default_panics() {
+        // Voice::default() should panic as Rust doesn't handle voice defaults
+        let _ = Voice::default();
     }
 
     #[test]
@@ -594,8 +585,8 @@ mod tests {
     fn test_voice_manager_get_voice() {
         let manager = VoiceManager::new();
         
-        let voice = manager.get_voice("af_bella").expect("Should find bella");
-        assert_eq!(voice.id, "af_bella");
+        let voice = manager.get_voice("af_alloy").expect("Should find alloy");
+        assert_eq!(voice.id, "af_alloy");
 
         let result = manager.get_voice("nonexistent");
         assert!(result.is_err());
@@ -605,7 +596,7 @@ mod tests {
     fn test_voice_manager_is_voice_available() {
         let manager = VoiceManager::new();
         
-        assert!(manager.is_voice_available("af_bella"));
+        assert!(manager.is_voice_available("af_alloy"));
         assert!(!manager.is_voice_available("nonexistent"));
     }
 
@@ -646,11 +637,11 @@ mod tests {
     }
 
     #[test]
-    fn test_voice_manager_get_default_voice() {
+    #[should_panic(expected = "VoiceManager::get_default_voice() should not be used")]
+    fn test_voice_manager_get_default_voice_panics() {
+        // get_default_voice() should panic as Rust doesn't decide defaults
         let manager = VoiceManager::new();
-        let default_voice = manager.get_default_voice();
-        
-        assert_eq!(default_voice.id, "af_bella");
+        let _ = manager.get_default_voice();
     }
 
     #[test]

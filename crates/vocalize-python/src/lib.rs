@@ -30,7 +30,13 @@ pub use tts_engine::PyTtsEngine as TtsEngine;
 /// 2025 Neural TTS synthesis function - uses Rust TTS engine
 #[pyfunction]
 fn synthesize_neural(text: String, voice_id: Option<String>, speed: Option<f32>, pitch: Option<f32>) -> PyResult<Vec<f32>> {
-    let voice_id = voice_id.unwrap_or_else(|| "af_heart".to_string());
+    // Rust doesn't handle voice loading - require voice_id from Python
+    let voice_id = match voice_id {
+        Some(id) => id,
+        None => {
+            return Err(PyVocalizeError::new_err("Voice ID is required. Python frontend must provide a voice ID.".to_string()));
+        }
+    };
     
     // Validate parameters
     if let Some(s) = speed {

@@ -41,7 +41,7 @@ except (ImportError, OSError) as e:
         print("Warning: sounddevice not available. Install with: uv add sounddevice")
 
 # Default values (no configuration needed)
-DEFAULT_VOICE = "kokoro_en_us_f"
+DEFAULT_VOICE = "af_alloy"
 DEFAULT_SPEED = 1.0
 DEFAULT_PITCH = 0.0
 DEFAULT_FORMAT = "wav"
@@ -275,22 +275,14 @@ def handle_speak_command(args):
             print(f"❌ Failed to download model: {model}")
             return
     
-    # Fast path: For Kokoro with default settings, skip voice discovery
-    if not voice and model == "kokoro":
-        voice = "af_sarah"  # Known working default
-        print(f"Using fast path default voice: {voice}")
-    elif not voice:
-        # Use default voice for model
-        voice = voice_manager.get_default_voice(model)
-        if not voice:
-            # For other models, handle fallback
-            print(f"❌ No voices found for model: {model}")
-            print("Try running: vocalize models download-voices {model}")
-            return
-        else:
-            print(f"Using model default voice: {voice}")
+    # Get voice from user input or use Python default
+    if not voice:
+        voice = DEFAULT_VOICE  # Use Python default af_alloy
+        if verbose:
+            print(f"No voice specified, using default: {voice}")
     else:
-        print(f"Using specified voice: {voice}")
+        if verbose:
+            print(f"Using specified voice: {voice}")
     
     print(f"🎙️  Synthesizing text: '{text}'")
     print(f"📦 Model: {model}, 🎵 Voice: {voice}, ⚡ Speed: {speed}, 🎛️  Pitch: {pitch}")

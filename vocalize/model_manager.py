@@ -520,7 +520,7 @@ class KokoroPhonemeProcessor:
             print("⚠️  ttstokenizer not available. Install with: pip install ttstokenizer")
             return False
     
-    def process_text(self, text: str, voice_id: str = "af_sarah") -> dict:
+    def process_text(self, text: str, voice_id: str = "af_alloy") -> dict:
         """
         Convert text to tokens ready for Kokoro ONNX inference.
         
@@ -594,14 +594,16 @@ class KokoroPhonemeProcessor:
             print(f"✅ Loaded voice embedding for '{voice_id}' (range: [{min(style_vector):.3f}, {max(style_vector):.3f}])")
             return style_vector
         
+        # Voice not found - show warning and use default
+        print(f"⚠️  Voice '{voice_id}' not found, using default 'af_alloy'")
+        
         # SAFE FALLBACK: Use default voice instead of random values
-        default_voices = ["af_sarah", "af_bella", "af_alloy"]  # Known good voices
+        default_voices = ["af_alloy", "af_bella", "af_sarah"]  # Known good voices
         for default_voice in default_voices:
             if self.voices is not None and default_voice in self.voices.files:
                 voice_array = self.voices[default_voice]
                 style_vector = voice_array[0, 0, :].tolist()
-                print(f"⚠️  Voice '{voice_id}' not found, using safe fallback '{default_voice}'")
-                print(f"✅ Loaded fallback voice embedding (range: [{min(style_vector):.3f}, {max(style_vector):.3f}])")
+                print(f"✅ Loaded fallback voice embedding '{default_voice}' (range: [{min(style_vector):.3f}, {max(style_vector):.3f}])")
                 return style_vector
         
         # Final emergency fallback: Create safe neutral vector
