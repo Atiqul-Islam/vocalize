@@ -180,11 +180,34 @@ impl ModelManager {
         
         // Create ONNX session using 2025 optimization settings and threading configuration
         tracing::info!("Loading model {} from Python-managed cache: {:?}", model_info.name, onnx_file);
+        // Detect if this is an INT8 quantized model
+        let is_int8_model = onnx_filename.contains("int8") || onnx_filename.contains("INT8");
+        let physical_cores = num_cpus::get_physical();
+        
+        // Configure based on model type
+        let (opt_level, intra_threads, inter_threads, memory_pattern) = if is_int8_model {
+            tracing::info!("INT8 quantized model detected - using conservative settings");
+            (
+                ort::session::builder::GraphOptimizationLevel::Level1,
+                std::cmp::min(4, physical_cores),
+                2,
+                false
+            )
+        } else {
+            tracing::info!("FP32 model detected - using performance settings");
+            (
+                ort::session::builder::GraphOptimizationLevel::Level3,
+                std::cmp::min(physical_cores, 8),
+                std::cmp::min(4, std::cmp::max(2, physical_cores / 3)),
+                true
+            )
+        };
+        
         let session = Session::builder()?
-            .with_optimization_level(ort::session::builder::GraphOptimizationLevel::Level3)?  // Maximum optimization
-            .with_intra_threads(4)?      // Multi-threaded intra-op execution
-            .with_inter_threads(4)?      // Multi-threaded inter-op execution
-            .with_memory_pattern(true)?  // Enable memory pattern optimization
+            .with_optimization_level(opt_level)?
+            .with_intra_threads(intra_threads)?
+            .with_inter_threads(inter_threads)?
+            .with_memory_pattern(memory_pattern)?
             .commit_from_file(&onnx_file)
             .context(format!("Failed to load ONNX model from {:?}", onnx_file))?;
             
@@ -210,7 +233,8 @@ impl ModelManager {
     }
     
     /// Get the path to the model's ONNX file for session pool initialization
-    pub async fn get_model_path(&self, model_id: ModelId) -> Result<PathBuf> {
+    /// Checks for quantized variants based on passed flags
+    pub async fn get_model_path(&self, model_id: ModelId, use_quantized: bool) -> Result<PathBuf> {
         // Ensure model is available in cache
         if !self.is_model_cached(model_id) {
             let model_info = self.get_model_info(model_id);
@@ -220,9 +244,27 @@ impl ModelManager {
             ));
         }
         
-        let model_info = self.get_model_info(model_id);
         
-        // Find the ONNX model file (first .onnx file in the files list)
+        tracing::debug!("Optimization flags - Quantization: {}", use_quantized);
+        
+        // Determine which model variant to use
+        // Priority: quantized > original
+        let variants = if use_quantized {
+            vec!["kokoro-v1.0-int8.onnx", "kokoro-v1.0.onnx"]
+        } else {
+            vec!["kokoro-v1.0.onnx"]
+        };
+        
+        // Try each variant in order
+        for variant in variants {
+            if let Some(path) = self.get_model_file_path(model_id, variant) {
+                tracing::info!("🎯 Using model variant: {} for {:?}", variant, model_id);
+                return Ok(path);
+            }
+        }
+        
+        // Fallback to original model search
+        let model_info = self.get_model_info(model_id);
         let onnx_filename = model_info.files.iter()
             .find(|f| f.ends_with(".onnx"))
             .ok_or_else(|| anyhow::anyhow!("No ONNX file found for model {}", model_info.name))?;

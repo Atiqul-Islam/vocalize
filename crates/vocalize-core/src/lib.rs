@@ -13,17 +13,15 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use vocalize_core::{TtsEngine, Voice, SynthesisParams, AudioDevice};
+//! use vocalize_core::{OnnxTtsEngine, AudioDevice};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     let engine = TtsEngine::new().await?;
-//!     let voice = Voice::default();
-//!     let params = SynthesisParams::new(voice);
-//!     let audio = engine.synthesize("Hello, world!", &params).await?;
+//!     // Use OnnxTtsEngine directly for neural TTS
+//!     let engine = OnnxTtsEngine::new_with_default_cache().await?;
 //!     
-//!     let mut device = AudioDevice::new().await?;
-//!     device.play(&audio).await?;
+//!     // In practice, synthesis is done through Python API
+//!     // which handles tokenization and model selection
 //!     
 //!     Ok(())
 //! }
@@ -40,9 +38,7 @@ pub mod audio_device;
 pub mod audio_writer;
 pub mod error;
 pub mod model;
-pub mod models;
 pub mod onnx_engine;
-pub mod tts_engine;
 pub mod voice_manager;
 pub mod wav_writer;
 
@@ -51,9 +47,9 @@ pub use audio_device::{AudioConfig, AudioDevice, AudioDeviceInfo, PlaybackState}
 pub use audio_writer::{AudioFormat, AudioWriter, EncodingSettings};
 pub use error::{VocalizeError, VocalizeResult};
 pub use model::{ModelId, ModelInfo, ModelManager, ModelConfig};
-pub use models::{TtsModel, ModelRegistry};
 pub use onnx_engine::OnnxTtsEngine;
-pub use tts_engine::{AudioData, SynthesisParams, TtsEngine, TtsConfig};
+/// Audio data type - 32-bit floating point samples
+pub type AudioData = Vec<f32>;
 pub use voice_manager::{Gender, Voice, VoiceManager, VoiceStyle};
 
 /// Version information for the vocalize-core crate

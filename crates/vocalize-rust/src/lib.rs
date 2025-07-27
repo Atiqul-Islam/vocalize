@@ -8,101 +8,37 @@ use pyo3::prelude::*;
 // Re-export submodules
 mod error;
 mod runtime_manager;
-mod tts_engine;
 mod voice_manager;
 mod audio_writer;
 mod audio_device;
 
 use error::{PyVocalizeError, VocalizeException};
-use tts_engine::{PyTtsEngine, PySynthesisParams};
 use voice_manager::{PyVoiceManager, PyVoice, PyGender, PyVoiceStyle};
 use audio_writer::{PyAudioWriter, PyAudioFormat, PyEncodingSettings};
 use audio_device::{PyAudioDevice, PyAudioConfig, PyAudioDeviceInfo, PyPlaybackState};
 
-// Use the SynthesisParams from tts_engine module
-pub use tts_engine::PySynthesisParams as SynthesisParams;
+// Re-export Python types
 pub use voice_manager::PyVoice as Voice;
 pub use voice_manager::PyVoiceManager as VoiceManager;
 pub use audio_writer::PyAudioWriter as AudioWriter;
 pub use audio_device::PyAudioDevice as AudioDevice;
-pub use tts_engine::PyTtsEngine as TtsEngine;
 
-/// 2025 Neural TTS synthesis function - uses Rust TTS engine
-#[pyfunction]
-fn synthesize_neural(text: String, voice_id: Option<String>, speed: Option<f32>, pitch: Option<f32>) -> PyResult<Vec<f32>> {
-    // Rust doesn't handle voice loading - require voice_id from Python
-    let voice_id = match voice_id {
-        Some(id) => id,
-        None => {
-            return Err(PyVocalizeError::new_err("Voice ID is required. Python frontend must provide a voice ID.".to_string()));
-        }
-    };
-    
-    // Validate parameters
-    if let Some(s) = speed {
-        if !(0.1..=3.0).contains(&s) {
-            return Err(PyVocalizeError::new_err(format!("Speed must be between 0.1 and 3.0, got {s}")));
-        }
-    }
-    if let Some(p) = pitch {
-        if !(-1.0..=1.0).contains(&p) {
-            return Err(PyVocalizeError::new_err(format!("Pitch must be between -1.0 and 1.0, got {p}")));
-        }
-    }
-    
-    if text.is_empty() {
-        return Err(PyVocalizeError::new_err("Text cannot be empty".to_string()));
-    }
-    
-    println!("🔊 2025 TTS: Using Rust TTS engine for: '{}'", text);
-    
-    // Use Rust TTS engine instead of reimplementing everything in Python
-    use vocalize_core::{TtsEngine, SynthesisParams, Voice, Gender, VoiceStyle};
-    
-    // Create runtime for async operations
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| PyVocalizeError::new_err(format!("Failed to create async runtime: {}", e)))?;
-    
-    rt.block_on(async {
-        // Create TTS engine with default config
-        let engine = TtsEngine::new().await
-            .map_err(|e| PyVocalizeError::new_err(format!("Failed to create TTS engine: {}", e)))?;
-        
-        // Create a voice configuration
-        let voice = Voice::new(
-            voice_id.clone(),
-            format!("Neural Voice {}", voice_id),
-            "en-US".to_string(),
-            Gender::Female,
-            VoiceStyle::Natural,
-        );
-        
-        // Apply speed and pitch modifications
-        let mut voice = voice;
-        voice.speed = speed.unwrap_or(1.0);
-        voice.pitch = pitch.unwrap_or(0.0);
-        
-        // Create synthesis parameters
-        let params = SynthesisParams::new(voice);
-        
-        // Synthesize using the Rust engine
-        let audio_data = engine.synthesize(&text, &params).await
-            .map_err(|e| PyVocalizeError::new_err(format!("Synthesis failed: {}", e)))?;
-        
-        println!("✅ 2025 synthesis completed: {} samples generated", audio_data.len());
-        Ok(audio_data)
-    })
-}
 
 /// 2025 Neural TTS synthesis using pre-processed tokens (new phoneme pipeline)
 #[pyfunction]
+#[pyo3(signature = (input_ids, style_vector, speed, model_id, model_path))]
 fn synthesize_from_tokens_neural(
     input_ids: Vec<i64>,
     style_vector: Vec<f32>,
     speed: f32,
-    model_id: Option<String>
+    model_id: Option<String>,
+    model_path: String
 ) -> PyResult<Vec<f32>> {
+    use std::time::Instant;
+    let total_start = Instant::now();
+    
     // Validate inputs
+    let validation_start = Instant::now();
     if input_ids.is_empty() {
         return Err(PyVocalizeError::new_err("Input IDs cannot be empty".to_string()));
     }
@@ -118,6 +54,7 @@ fn synthesize_from_tokens_neural(
     if input_ids.len() > 512 {
         return Err(PyVocalizeError::new_err(format!("Token sequence too long: {} tokens (max 512)", input_ids.len())));
     }
+    eprintln!("  ⏱️  [Rust] Input validation: {:.3}s", validation_start.elapsed().as_secs_f32());
     
     println!("🔊 2025 TTS: Using pre-processed tokens ({} tokens, {} style dims, speed: {})", 
              input_ids.len(), style_vector.len(), speed);
@@ -126,13 +63,17 @@ fn synthesize_from_tokens_neural(
     use vocalize_core::{onnx_engine::OnnxTtsEngine, model::ModelId};
     
     // Create runtime for async operations
+    let runtime_start = Instant::now();
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| PyVocalizeError::new_err(format!("Failed to create async runtime: {}", e)))?;
+    eprintln!("  ⏱️  [Rust] Tokio runtime creation: {:.3}s", runtime_start.elapsed().as_secs_f32());
     
     rt.block_on(async {
         // Create ONNX engine with cross-platform cache directory
+        let engine_start = Instant::now();
         let mut engine = OnnxTtsEngine::new_with_default_cache().await
             .map_err(|e| PyVocalizeError::new_err(format!("Failed to create ONNX engine: {}", e)))?;
+        eprintln!("  ⏱️  [Rust] ONNX engine creation: {:.3}s", engine_start.elapsed().as_secs_f32());
         
         // Determine model ID
         let model = match model_id.as_deref().unwrap_or("kokoro") {
@@ -142,34 +83,25 @@ fn synthesize_from_tokens_neural(
             _ => ModelId::Kokoro, // Default fallback
         };
         
-        // Synthesize using the new token-based method
+        // Synthesize using the new token-based method with model path
+        let synthesis_start = Instant::now();
         let audio_data = engine.synthesize_from_tokens(
             input_ids,
             style_vector,
             speed,
-            model
+            model,
+            model_path
         ).await
         .map_err(|e| PyVocalizeError::new_err(format!("Token synthesis failed: {}", e)))?;
+        eprintln!("  ⏱️  [Rust] Token synthesis: {:.3}s", synthesis_start.elapsed().as_secs_f32());
         
+        eprintln!("  ⏱️  [Rust] Total synthesis time: {:.3}s", total_start.elapsed().as_secs_f32());
         println!("✅ 2025 token synthesis completed: {} samples generated", audio_data.len());
         Ok(audio_data)
     })
 }
 
 
-/// Get list of available neural voices
-#[pyfunction]
-fn list_neural_voices() -> PyResult<Vec<(String, String, String, String)>> {
-    // Return neural voice list instead of using old voice manager
-    let neural_voices = vec![
-        ("kokoro_en_us_f".to_string(), "Kokoro Female".to_string(), "female".to_string(), "en-US".to_string()),
-        ("kokoro_en_us_m".to_string(), "Kokoro Male".to_string(), "male".to_string(), "en-US".to_string()),
-        ("chatterbox_en_f".to_string(), "Chatterbox English".to_string(), "female".to_string(), "en-US".to_string()),
-        ("dia_en_premium".to_string(), "Dia Premium".to_string(), "female".to_string(), "en-US".to_string()),
-    ];
-    
-    Ok(neural_voices)
-}
 
 
 /// Save neural TTS audio data to a file
@@ -242,12 +174,7 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             let prefix: String = sys.getattr("prefix")?.extract()?;
             let dll_dir = format!("{}\\Lib\\site-packages\\vocalize_rust", prefix);
             
-            // First, check if System32 has a conflicting version
-            let system32_dll = "C:\\Windows\\System32\\onnxruntime.dll";
-            if std::path::Path::new(system32_dll).exists() {
-                eprintln!("⚠️  WARNING: Found ONNX Runtime in System32 at: {}", system32_dll);
-                eprintln!("   This may conflict with the bundled version.");
-            }
+            // Note: We bundle our own ONNX Runtime DLLs, so no need to check System32
             
             // Add directory to Python's DLL search path (for Python 3.8+)
             let os = _py.import("os")?;
@@ -300,20 +227,16 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                     eprintln!("   Path: {}", onnx_path);
                     eprintln!("   Error code: {}", error);
                     
-                    // If pre-loading failed, show detailed error message
-                    if std::path::Path::new(system32_dll).exists() {
-                        eprintln!("\n🚨 ONNX Runtime Version Conflict Detected!");
-                        eprintln!("   System32 contains an incompatible version of ONNX Runtime.");
-                        eprintln!("   This is preventing the correct version from loading.\n");
-                        eprintln!("   Solutions:");
-                        eprintln!("   1. Run as Administrator and rename the System32 version:");
-                        eprintln!("      ren C:\\Windows\\System32\\onnxruntime.dll onnxruntime.dll.bak");
-                        eprintln!("   2. Or uninstall the system-wide ONNX Runtime");
-                        
-                        return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                            "ONNX Runtime version conflict: System32 contains incompatible version. See error message above for solutions."
-                        ));
-                    }
+                    // If pre-loading failed, it's likely a missing dependency
+                    eprintln!("\n🚨 Failed to load ONNX Runtime!");
+                    eprintln!("   The bundled ONNX Runtime DLL could not be loaded.");
+                    eprintln!("   This might be due to missing Visual C++ Redistributables.");
+                    eprintln!("\n   Solution: Install Visual C++ Redistributables from:");
+                    eprintln!("   https://aka.ms/vs/17/release/vc_redist.x64.exe");
+                    
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                        "Failed to load ONNX Runtime DLL. Please install Visual C++ Redistributables."
+                    ));
                 } else {
                     eprintln!("✅ Pre-loaded onnxruntime.dll");
                 }
@@ -383,8 +306,6 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
     // Add classes
-    m.add_class::<PyTtsEngine>()?;
-    m.add_class::<PySynthesisParams>()?;
     m.add_class::<PyVoice>()?;
     m.add_class::<PyVoiceManager>()?;
     m.add_class::<PyAudioWriter>()?;
@@ -406,8 +327,6 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add("VocalizeException", _py.get_type::<VocalizeException>())?;
 
     // Add aliased classes for backward compatibility
-    m.add("TtsEngine", _py.get_type::<PyTtsEngine>())?;
-    m.add("SynthesisParams", _py.get_type::<PySynthesisParams>())?;
     m.add("Voice", _py.get_type::<PyVoice>())?;
     m.add("VoiceManager", _py.get_type::<PyVoiceManager>())?;
     m.add("AudioWriter", _py.get_type::<PyAudioWriter>())?;
@@ -417,9 +336,7 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add("VoiceStyle", _py.get_type::<PyVoiceStyle>())?;
 
     // Add neural TTS functions
-    m.add_function(wrap_pyfunction!(synthesize_neural, m)?)?;
     m.add_function(wrap_pyfunction!(synthesize_from_tokens_neural, m)?)?;
-    m.add_function(wrap_pyfunction!(list_neural_voices, m)?)?;
     m.add_function(wrap_pyfunction!(save_audio_neural, m)?)?;
     
     // Add constants

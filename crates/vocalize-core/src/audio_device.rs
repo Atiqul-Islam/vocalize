@@ -1,7 +1,7 @@
 //! Audio device management for real-time audio playback.
 
 use crate::error::{VocalizeError, VocalizeResult};
-use crate::tts_engine::AudioData;
+use crate::AudioData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

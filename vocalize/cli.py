@@ -23,12 +23,26 @@ import platformdirs
 # Check if verbose mode is requested early
 _verbose = "--verbose" in sys.argv
 
-# Import our reliable Python model manager
-if _verbose:
-    _import_start = time.perf_counter()
-from .model_manager import ModelManager, ensure_model_available
-if _verbose:
-    print(f"  ⏱️  Import ModelManager: {time.perf_counter() - _import_start:.3f}s")
+# Lazy imports for model manager to speed up help commands
+ModelManager = None
+ensure_model_available = None
+
+def _import_model_manager():
+    """Import model manager components lazily."""
+    global ModelManager, ensure_model_available
+    if ModelManager is None:
+        if _verbose:
+            _import_start = time.perf_counter()
+        from .model_manager import ModelManager as _ModelManager, ensure_model_available as _ensure
+        ModelManager = _ModelManager
+        ensure_model_available = _ensure
+        if _verbose:
+            print(f"  ⏱️  Import ModelManager: {time.perf_counter() - _import_start:.3f}s")
+
+# Import model optimizer lazily to avoid slow startup
+# These will be imported only when needed
+ModelOptimizer = None
+handle_optimize_command = None
 
 try:
     import sounddevice as sd
@@ -106,6 +120,7 @@ class VocalizeComponents:
             
             # CRITICAL: Ensure model is downloaded using reliable Python client
             print(f"🔍 Checking if model '{model_id}' is available...")
+            _import_model_manager()
             if not ensure_model_available(model_id):
                 raise RuntimeError(f"Failed to download required model: {model_id}")
             
@@ -115,10 +130,14 @@ class VocalizeComponents:
             from . import vocalize_rust
             print("DEBUG: Successfully imported vocalize_rust")
             
-            # Use neural ONNX TTS engine for synthesis (Rust loads from Python-managed cache)
-            print("DEBUG: Calling vocalize_rust.synthesize_neural()...")
-            samples = vocalize_rust.synthesize_neural(text, voice, speed, pitch)
-            print(f"✅ Got {len(samples)} audio samples from neural synthesis")
+            # Always use token-based synthesis
+            print("DEBUG: Using token-based synthesis...")
+            # Get model from voice mapping
+            model = voice_to_model.get(voice, "kokoro")
+            # Call synthesize_with_tokens which handles all the tokenization
+            audio_data = synthesize_with_tokens(text, voice, speed, pitch, model)
+            samples = audio_data.samples
+            print(f"✅ Got {len(samples)} audio samples from token synthesis")
             
             return VocalizeComponents.AudioData(samples)
             
@@ -192,8 +211,15 @@ class VocalizeComponents:
 def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, model: str) -> 'VocalizeComponents.AudioData':
     """Synthesize using token-based approach for better compatibility."""
     verbose = _verbose  # Use global verbose flag
+    synthesis_start = time.perf_counter()
+    
     try:
         print(f"🎙️  Starting phoneme-based synthesis - text: '{text}', voice: {voice}")
+        
+        # Ensure model is available before processing
+        _import_model_manager()
+        if not ensure_model_available(model):
+            raise RuntimeError(f"Failed to download required model: {model}")
         
         # Use the phoneme processor to convert text to tokens
         with Timer("Import KokoroPhonemeProcessor", verbose):
@@ -204,17 +230,27 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
             # Use cross-platform cache directory that matches Rust implementation
             cache_base = platformdirs.user_cache_dir("vocalize", "Vocalize")
             cache_dir = Path(cache_base) / "models" / "models--direct_download" / "local"
-            processor = KokoroPhonemeProcessor(cache_dir)
+            
+            with Timer("Create KokoroPhonemeProcessor", verbose):
+                processor = KokoroPhonemeProcessor(cache_dir)
             
             # Process text to tokens with proper speed
-            result = processor.process_text(text, voice)
-            result['speed'] = speed  # Override speed
+            with Timer("Process text to tokens", verbose):
+                result = processor.process_text(text, voice)
+                result['speed'] = speed  # Override speed
             
             print(f"📝 Generated {len(result['input_ids'])} tokens for synthesis")
             
             # Import the Rust neural TTS bindings
-            from . import vocalize_rust
+            with Timer("Import vocalize_rust", verbose):
+                from . import vocalize_rust
             print("DEBUG: Successfully imported vocalize_rust for token synthesis")
+            
+            # Get the active model path based on optimization settings
+            from .model_optimizer import ModelOptimizer
+            optimizer = ModelOptimizer()
+            active_model_path = optimizer.get_active_model_path()
+            model_path = str(active_model_path)
             
             # Use token-based neural synthesis
             print("DEBUG: Calling vocalize_rust.synthesize_from_tokens_neural()...")
@@ -222,14 +258,21 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
             print(f"DEBUG: style vector length: {len(result['style'])}")
             print(f"DEBUG: style vector range: [{min(result['style']):.3f}, {max(result['style']):.3f}]")
             print(f"DEBUG: speed: {result['speed']}")
+            print(f"DEBUG: model_path: {model_path}")
             
+            rust_call_start = time.perf_counter()
             samples = vocalize_rust.synthesize_from_tokens_neural(
                 result['input_ids'],
                 result['style'],
                 result['speed'],
-                model
+                model,
+                model_path
             )
+            rust_call_duration = time.perf_counter() - rust_call_start
+            
             print(f"✅ Got {len(samples)} audio samples from token synthesis")
+            if verbose:
+                print(f"  ⏱️  Rust synthesis call: {rust_call_duration:.3f}s")
             
             return VocalizeComponents.AudioData(samples)
         else:
@@ -238,8 +281,12 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
             
     except Exception as e:
         print(f"❌ Token synthesis failed: {e}")
-        # Fall back to original synthesis
-        return VocalizeComponents.synthesize_text(text, voice, speed, pitch)
+        # Return empty audio instead of retrying to prevent infinite loop
+        return VocalizeComponents.AudioData([])
+    finally:
+        if verbose:
+            total_synthesis_time = time.perf_counter() - synthesis_start
+            print(f"  ⏱️  Total synthesize_with_tokens: {total_synthesis_time:.3f}s")
 
 
 def handle_speak_command(args):
@@ -264,16 +311,14 @@ def handle_speak_command(args):
     
     # Initialize managers
     with Timer("Initialize ModelManager", verbose):
+        _import_model_manager()
         manager = ModelManager()
     
     with Timer("Initialize VoiceManager", verbose):
         voice_manager = VoiceManager(str(manager.cache_dir))
     
-    # Ensure model is available
-    with Timer("ensure_model_available", verbose):
-        if not ensure_model_available(model):
-            print(f"❌ Failed to download model: {model}")
-            return
+    # Skip redundant model check - it will be checked during synthesis anyway
+    # This saves ~0.5s by avoiding duplicate validation
     
     # Get voice from user input or use Python default
     if not voice:
@@ -326,6 +371,7 @@ def handle_list_voices_command(args):
     
     # Initialize managers
     with Timer("Initialize ModelManager", verbose):
+        _import_model_manager()
         manager = ModelManager()
     
     with Timer("Initialize VoiceManager", verbose):
@@ -337,6 +383,7 @@ def handle_list_voices_command(args):
     
     # If no voices found, ensure model is available and try again
     if not voices:
+        _import_model_manager()
         with Timer("ensure_model_available", verbose):
             if not ensure_model_available(model):
                 print(f"❌ Failed to download model: {model}")
@@ -496,6 +543,8 @@ Examples:
   vocalize play audio.wav
   vocalize models list
   vocalize models download kokoro
+  vocalize optimize status
+  vocalize optimize cache enable
         """.strip()
     )
     
@@ -539,6 +588,41 @@ Examples:
     # Play command
     play_parser = subparsers.add_parser("play", help="Play audio file")
     play_parser.add_argument("input", help="Input audio file path")
+    
+    # Optimize command - manage all optimizations
+    optimize_parser = subparsers.add_parser("optimize", help="Manage performance optimizations")
+    optimize_subparsers = optimize_parser.add_subparsers(dest="optimize_action", help="Optimization actions")
+    
+    # Cache optimization subcommands
+    cache_parser = optimize_subparsers.add_parser("cache", help="Token cache operations")
+    cache_subparsers = cache_parser.add_subparsers(dest="cache_action", help="Cache actions")
+    
+    cache_enable_parser = cache_subparsers.add_parser("enable", help="Enable token cache and build if needed")
+    cache_disable_parser = cache_subparsers.add_parser("disable", help="Disable token cache")
+    cache_build_parser = cache_subparsers.add_parser("build", help="Build or rebuild the token cache")
+    cache_build_parser.add_argument("--force", action="store_true", help="Force rebuild even if cache exists")
+    cache_clear_parser = cache_subparsers.add_parser("clear", help="Clear the token cache")
+    cache_stats_parser = cache_subparsers.add_parser("stats", help="Show cache statistics")
+    
+    # Quantization subcommands
+    quantize_parser = optimize_subparsers.add_parser("quantize", help="Quantization operations")
+    quantize_subparsers = quantize_parser.add_subparsers(dest="quantize_action", help="Quantize actions")
+    
+    quantize_enable_parser = quantize_subparsers.add_parser("enable", help="Enable quantization (downloads model if needed)")
+    quantize_disable_parser = quantize_subparsers.add_parser("disable", help="Disable quantization")
+    quantize_status_parser = quantize_subparsers.add_parser("status", help="Show quantization status")
+    
+    # Enable all optimizations
+    enable_all_parser = optimize_subparsers.add_parser("enable", help="Enable all optimizations")
+    enable_all_parser.add_argument("--all", action="store_true", default=True, help="Enable all optimizations")
+    
+    # Disable all optimizations
+    disable_all_parser = optimize_subparsers.add_parser("disable", help="Disable all optimizations")
+    disable_all_parser.add_argument("--all", action="store_true", default=True, help="Disable all optimizations")
+    
+    # Status
+    status_parser = optimize_subparsers.add_parser("status", help="Show all optimization status")
+    
     
     # Models command - new reliable Python-based model management
     models_parser = subparsers.add_parser("models", help="Manage neural TTS models")
@@ -588,6 +672,12 @@ def main():
             handle_play_command(args)
         elif args.command == "models":
             handle_models_command(args)
+        elif args.command == "optimize":
+            # Lazy import to avoid slow startup
+            global handle_optimize_command
+            if handle_optimize_command is None:
+                from .optimize_cli import handle_optimize_command
+            handle_optimize_command(args)
         else:
             parser.print_help()
             sys.exit(1)

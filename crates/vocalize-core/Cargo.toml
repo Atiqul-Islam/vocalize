@@ -38,6 +38,9 @@ flate2 = "1.0"                 # GZ decompression
 tokenizers = "0.15"            # HuggingFace tokenizers
 unicode-normalization = "0.1"  # Text normalization
 
+# Configuration
+toml = "0.8"                   # TOML config file parsing
+
 serde_json = "1.0"
 
 # Audio file writing (no external system deps)
@@ -52,6 +55,7 @@ directories = "5.0"  # Cross-platform application directories
 parking_lot.workspace = true
 rayon.workspace = true
 chrono = "0.4"  # For timestamp logging
+num_cpus = "1.16"  # CPU core detection for optimal threading
 
 
 [dev-dependencies]

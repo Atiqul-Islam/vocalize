@@ -20,9 +20,13 @@ pub struct OnnxSessionPool {
     max_concurrent: usize,
 }
 
+
 impl OnnxSessionPool {
     /// Create a new session pool
     pub async fn new(model_path: &std::path::Path, pool_size: usize) -> Result<Self> {
+        use std::time::Instant;
+        let total_start = Instant::now();
+        
         if pool_size == 0 {
             return Err(anyhow::anyhow!("Pool size must be greater than 0"));
         }
@@ -33,14 +37,17 @@ impl OnnxSessionPool {
         
         // Create multiple session instances with optimized settings
         for i in 0..pool_size {
+            let session_start = Instant::now();
             let session = Self::create_optimized_session(model_path)
                 .await
                 .with_context(|| format!("Failed to create session {} of {}", i + 1, pool_size))?;
             
             sessions.push(Arc::new(Mutex::new(session)));
+            eprintln!("  ⏱️  [Pool] Session {} creation: {:.3}s", i + 1, session_start.elapsed().as_secs_f32());
             tracing::debug!("Created ONNX session {} of {}", i + 1, pool_size);
         }
         
+        eprintln!("  ⏱️  [Pool] Total pool creation: {:.3}s", total_start.elapsed().as_secs_f32());
         tracing::info!("✅ ONNX session pool created successfully");
         
         Ok(Self {
@@ -53,19 +60,64 @@ impl OnnxSessionPool {
     
     /// Create an optimized ONNX session with deadlock prevention
     async fn create_optimized_session(model_path: &std::path::Path) -> Result<Session> {
+        use std::time::Instant;
+        let start = Instant::now();
+        
         tracing::debug!("🔧 Creating ONNX session with anti-deadlock configuration");
         
-        // Set up session with optimized configuration for better performance
+        // Detect if this is an INT8 quantized model
+        let filename = model_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let is_int8_model = filename.contains("int8") || filename.contains("INT8");
+        
+        // Detect CPU cores for optimal threading
+        let physical_cores = num_cpus::get_physical() as usize;
+        let logical_cores = num_cpus::get() as usize;
+        eprintln!("  🖥️  CPU Detection: {} physical cores, {} logical cores", physical_cores, logical_cores);
+        
+        // Configure based on model type
+        let (session_opt_level, opt_level_str, intra_threads, inter_threads, memory_pattern) = if is_int8_model {
+            eprintln!("  ⚡ INT8 quantized model detected - using conservative settings");
+            // INT8 models need conservative settings
+            (
+                GraphOptimizationLevel::Level1,  // Basic optimization only
+                "Level1 (basic, INT8 compatible)",
+                std::cmp::min(4, physical_cores),  // Max 4 threads for INT8
+                2,  // Minimal inter-op threads
+                false  // Disable memory pattern for INT8
+            )
+        } else {
+            eprintln!("  🚀 FP32 model detected - using performance settings");
+            // FP32 models can use aggressive optimization
+            (
+                GraphOptimizationLevel::Level3,  // Maximum optimization
+                "Level3 (maximum)",
+                std::cmp::min(physical_cores, 8),  // Use cores but cap at 8
+                std::cmp::min(4, std::cmp::max(2, physical_cores / 3)),
+                true  // Enable memory pattern
+            )
+        };
+        
+        eprintln!("  🧵 Thread Configuration: {} intra-op threads, {} inter-op threads", intra_threads, inter_threads);
+        
+        // Set up session with optimized configuration
         let session = Session::builder()?
-            // Use maximum optimization for speed
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            // Multi-threading for better performance
-            .with_intra_threads(4)?
-            .with_inter_threads(4)?
-            // Enable memory pattern optimization
-            .with_memory_pattern(true)?
+            // Use appropriate optimization level
+            .with_optimization_level(session_opt_level)?
+            // Use calculated threads
+            .with_intra_threads(intra_threads)?
+            .with_inter_threads(inter_threads)?
+            // Memory pattern based on model type
+            .with_memory_pattern(memory_pattern)?
             // Load the model
             .commit_from_file(model_path)?;
+        
+        let filename = model_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        eprintln!("  ⏱️  [Pool] Individual session build: {:.3}s", start.elapsed().as_secs_f32());
+        eprintln!("  📊 Model: {}, Using optimization: {}", filename, opt_level_str);
         
         // Validate session immediately after creation
         tracing::debug!("✅ ONNX session created and validated successfully");

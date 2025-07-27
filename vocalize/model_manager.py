@@ -242,7 +242,9 @@ class ModelManager:
         # 2025 working model URLs
         model_urls = {
             "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
-            "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+            "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+            # Pre-quantized INT8 model from taylorchu with selective layer quantization
+            "kokoro-v1.0.int8.onnx": "https://github.com/taylorchu/kokoro-onnx/releases/download/v0.2.0/kokoro-v1.0.int8.onnx"
         }
         
         # Create local directory
@@ -473,9 +475,32 @@ def ensure_model_available(model_id: str, cache_dir: Optional[str] = None) -> bo
 class KokoroPhonemeProcessor:
     """Handles text-to-phoneme conversion and tokenization for Kokoro TTS."""
     
+    # Class-level tokenizer cache to avoid recreating it
+    _shared_tokenizer = None
+    _tokenizer_lock = None
+    
+    # Class-level voice cache to avoid reloading NPZ
+    _shared_voices = {}
+    _voices_lock = None
+    
+    # Class-level token cache for fast lookups
+    _shared_token_cache = None
+    
     def __init__(self, model_dir: Path):
+        # Initialize locks first, before any method calls
+        if KokoroPhonemeProcessor._tokenizer_lock is None:
+            import threading
+            KokoroPhonemeProcessor._tokenizer_lock = threading.Lock()
+            KokoroPhonemeProcessor._voices_lock = threading.Lock()
+        
+        # Initialize token cache (shared across instances)
+        if KokoroPhonemeProcessor._shared_token_cache is None:
+            from .token_cache import TokenCache
+            KokoroPhonemeProcessor._shared_token_cache = TokenCache()
+        
         self.model_dir = model_dir
         self.tokenizer = None
+        self.token_cache = KokoroPhonemeProcessor._shared_token_cache
         self.phoneme_config = None
         self.voices = None
         self._load_phoneme_config()
@@ -491,48 +516,133 @@ class KokoroPhonemeProcessor:
                 print("✅ Loaded phoneme configuration")
     
     def _load_voices(self):
-        """Load voice embeddings from NPZ file."""
+        """Load voice embeddings from NPZ file - uses cached instance when possible."""
         voices_file = self.model_dir / "voices-v1.0.bin"
-        if voices_file.exists():
-            try:
-                # NPZ loading requires full numpy, not tinynumpy
-                import numpy as np
-                self.voices = np.load(str(voices_file))
-                print(f"✅ Loaded {len(self.voices.files)} voices from NPZ file")
-                # List available voices
-                print(f"   Available voices: {', '.join(sorted(self.voices.files)[:10])}...")
-            except Exception as e:
-                print(f"⚠️  Failed to load voices: {e}")
+        cache_key = str(voices_file)
+        
+        # Check if we already have cached voices for this file
+        if cache_key in KokoroPhonemeProcessor._shared_voices:
+            self.voices = KokoroPhonemeProcessor._shared_voices[cache_key]
+            print(f"✅ Using cached voices from NPZ file ({len(self.voices.files)} voices)")
+            return
+        
+        # Lock to ensure only one thread loads the voices
+        with KokoroPhonemeProcessor._voices_lock:
+            # Double-check after acquiring lock
+            if cache_key in KokoroPhonemeProcessor._shared_voices:
+                self.voices = KokoroPhonemeProcessor._shared_voices[cache_key]
+                return
+            
+            import time
+            load_start = time.perf_counter()
+            
+            if voices_file.exists():
+                try:
+                    # NPZ loading requires full numpy, not tinynumpy
+                    import numpy as np
+                    voices = np.load(str(voices_file))
+                    load_duration = time.perf_counter() - load_start
+                    
+                    # Cache the voices
+                    KokoroPhonemeProcessor._shared_voices[cache_key] = voices
+                    self.voices = voices
+                    
+                    print(f"✅ Loaded {len(voices.files)} voices from NPZ file (took {load_duration:.3f}s)")
+                    # List available voices
+                    print(f"   Available voices: {', '.join(sorted(voices.files)[:10])}...")
+                except Exception as e:
+                    print(f"⚠️  Failed to load voices: {e}")
+                    self.voices = None
+            else:
+                print(f"⚠️  Voices file not found: {voices_file}")
                 self.voices = None
-        else:
-            print(f"⚠️  Voices file not found: {voices_file}")
-            self.voices = None
         
     def setup_tokenizer(self):
-        """Setup ttstokenizer for phoneme processing."""
-        try:
-            # Try to import ttstokenizer
-            from ttstokenizer import IPATokenizer
-            self.tokenizer = IPATokenizer()
-            print("✅ ttstokenizer loaded successfully")
+        """Setup ttstokenizer for phoneme processing - uses cached instance when possible."""
+        # Check if we already have a shared tokenizer
+        if KokoroPhonemeProcessor._shared_tokenizer is not None:
+            self.tokenizer = KokoroPhonemeProcessor._shared_tokenizer
+            print("✅ Using cached ttstokenizer instance")
             return True
-        except ImportError:
-            print("⚠️  ttstokenizer not available. Install with: pip install ttstokenizer")
-            return False
+        
+        # Lock to ensure only one thread creates the tokenizer
+        with KokoroPhonemeProcessor._tokenizer_lock:
+            # Double-check after acquiring lock
+            if KokoroPhonemeProcessor._shared_tokenizer is not None:
+                self.tokenizer = KokoroPhonemeProcessor._shared_tokenizer
+                return True
+            
+            try:
+                # Try to import ttstokenizer
+                import time
+                start = time.perf_counter()
+                from ttstokenizer import IPATokenizer
+                tokenizer = IPATokenizer()
+                duration = time.perf_counter() - start
+                
+                # Cache the tokenizer for future use
+                KokoroPhonemeProcessor._shared_tokenizer = tokenizer
+                self.tokenizer = tokenizer
+                
+                print(f"✅ ttstokenizer loaded successfully (took {duration:.3f}s)")
+                return True
+            except ImportError:
+                print("⚠️  ttstokenizer not available. Install with: pip install ttstokenizer")
+                return False
     
     def process_text(self, text: str, voice_id: str = "af_alloy") -> dict:
         """
         Convert text to tokens ready for Kokoro ONNX inference.
+        Uses token cache for dramatic speedup on common words/phrases.
         
         Returns:
             dict with 'input_ids', 'style', 'speed' for ONNX model
         """
+        import time
+        
+        # Check token cache first
+        cache_start = time.perf_counter()
+        cached_tokens = self.token_cache.get_tokens(text)
+        
+        if cached_tokens is not None:
+            cache_duration = time.perf_counter() - cache_start
+            print(f"✅ Token cache hit! Retrieved {len(cached_tokens)} tokens in {cache_duration:.3f}s")
+            
+            # Add padding
+            input_ids = [0] + cached_tokens[:510] + [0]
+            
+            # Ensure max length constraint
+            if len(input_ids) > 512:
+                input_ids = input_ids[:512]
+            
+            # Get voice embedding
+            style_vector = self._get_voice_embedding(voice_id)
+            
+            return {
+                "input_ids": input_ids,
+                "style": style_vector,
+                "speed": 1.0,
+                "voice_id": voice_id
+            }
+        
+        # Cache miss or disabled - need to compute tokens
+        cache_duration = time.perf_counter() - cache_start
+        if self.token_cache.enabled:
+            print(f"Token cache miss for text: '{text[:50]}...' (lookup took {cache_duration:.3f}s)")
+        else:
+            # Cache is disabled, no need to show miss message
+            pass
+        
         # For testing: create mock tokenization until ttstokenizer is properly installed
         if not self.tokenizer:
             if not self.setup_tokenizer():
                 print("⚠️  Using mock tokenization for testing (ttstokenizer not available)")
                 # Mock tokenization: convert text to character-based tokens
                 char_tokens = [ord(c) % 256 for c in text.lower()]  # Simple char-to-token mapping
+                
+                # Add to cache for future use
+                self.token_cache.add_tokens(text, char_tokens[:510])
+                
                 input_ids = [0] + char_tokens[:510] + [0]  # Add padding, ensure max 512
                 
                 # Load real voice embedding or fall back to random
@@ -546,15 +656,25 @@ class KokoroPhonemeProcessor:
                 }
         
         # Real tokenization with ttstokenizer
+        tokenize_start = time.perf_counter()
         tokens = self.tokenizer(text)
+        
         # ttstokenizer returns numpy array of token IDs
         if hasattr(tokens, 'tolist'):
-            # Convert numpy array to list and add padding
+            # Convert numpy array to list
             token_list = tokens.tolist()[:510]  # Limit length
-            input_ids = [0] + token_list + [0]  # Add padding tokens
         else:
             # Fallback if unexpected format
-            input_ids = [0] + list(tokens)[:510] + [0]
+            token_list = list(tokens)[:510]
+        
+        tokenize_duration = time.perf_counter() - tokenize_start
+        print(f"Tokenization took {tokenize_duration:.3f}s")
+        
+        # Add to cache for future use
+        self.token_cache.add_tokens(text, token_list)
+        
+        # Add padding and prepare final input
+        input_ids = [0] + token_list + [0]  # Add padding tokens
         
         # Ensure max length constraint
         if len(input_ids) > 512:

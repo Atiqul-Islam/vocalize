@@ -21,7 +21,7 @@ try:
     
     # Export main classes from Rust bindings
     from vocalize_rust import (
-        TtsEngine, SynthesisParams, Voice, VoiceManager, AudioWriter, AudioDevice,
+        Voice, VoiceManager, AudioWriter, AudioDevice,
         VocalizeError, Gender, VoiceStyle
     )
     
@@ -49,53 +49,6 @@ except ImportError:
             # Python decides the default voice, not Rust
             return Voice("af_alloy", "Alloy", "en-US", "male", "natural")
     
-    class SynthesisParams:
-        """Mock SynthesisParams class."""
-        def __init__(self, voice: Voice):
-            self.voice = voice
-            self.speed = None
-            self.pitch = None
-            self.streaming_chunk_size = None
-        
-        def with_speed(self, speed: float):
-            if not (0.1 <= speed <= 3.0):
-                raise VocalizeError(f"Speed must be between 0.1 and 3.0, got {speed}")
-            new_params = SynthesisParams(self.voice)
-            new_params.speed = speed
-            new_params.pitch = self.pitch
-            new_params.streaming_chunk_size = self.streaming_chunk_size
-            return new_params
-        
-        def with_pitch(self, pitch: float):
-            if not (-1.0 <= pitch <= 1.0):
-                raise VocalizeError(f"Pitch must be between -1.0 and 1.0, got {pitch}")
-            new_params = SynthesisParams(self.voice)
-            new_params.speed = self.speed
-            new_params.pitch = pitch
-            new_params.streaming_chunk_size = self.streaming_chunk_size
-            return new_params
-        
-        def with_streaming(self, chunk_size: int):
-            new_params = SynthesisParams(self.voice)
-            new_params.speed = self.speed
-            new_params.pitch = self.pitch
-            new_params.streaming_chunk_size = chunk_size
-            return new_params
-        
-        def without_streaming(self):
-            new_params = SynthesisParams(self.voice)
-            new_params.speed = self.speed
-            new_params.pitch = self.pitch
-            new_params.streaming_chunk_size = None
-            return new_params
-    
-    class TtsEngine:
-        """Mock TtsEngine class."""
-        def __init__(self):
-            pass
-        
-        def __repr__(self):
-            return "TtsEngine()"
         
         async def synthesize(self, text: str, params: SynthesisParams):
             # Use CLI components for synthesis
@@ -155,9 +108,7 @@ __all__ = [
     "DEFAULT_SAMPLE_RATE",
     "DEFAULT_CHANNELS", 
     "MAX_TEXT_LENGTH",
-    # Core classes
-    "TtsEngine",
-    "SynthesisParams", 
+    # Core classes 
     "Voice",
     "VoiceManager",
     "AudioWriter",

@@ -24,11 +24,13 @@ pub struct OnnxTtsEngine {
 impl OnnxTtsEngine {
     /// Create a new ONNX TTS engine
     pub async fn new(cache_dir: PathBuf) -> Result<Self> {
+        use std::time::Instant;
+        let total_start = Instant::now();
+        
         // 2025 ONNX Fix: Enable float16 optimization to prevent noise output
         std::env::set_var("ORT_ENABLE_FP16", "1");
-        std::env::set_var("ORT_DISABLE_ALL_OPTIMIZATIONS", "0");
         
-        tracing::info!("ONNX Engine: Set float16 optimization environment variables");
+        tracing::info!("ONNX Engine: Set float16 optimization environment variable");
         
         // Initialize ONNX Runtime with load-dynamic feature
         // This MUST be called before any ort usage when using load-dynamic
@@ -45,8 +47,10 @@ impl OnnxTtsEngine {
         }
         
         // Initialize ONNX Runtime with load-dynamic feature
+        let ort_init_start = Instant::now();
         match ort::init().commit() {
             Ok(_) => {
+                eprintln!("  ⏱️  [ONNX] ort::init(): {:.3}s", ort_init_start.elapsed().as_secs_f32());
                 tracing::info!("ONNX Engine: Successfully initialized ONNX Runtime with load-dynamic and optimizations");
             }
             Err(e) => {
@@ -57,7 +61,11 @@ impl OnnxTtsEngine {
             }
         }
         
+        let model_manager_start = Instant::now();
         let model_manager = ModelManager::new(cache_dir);
+        eprintln!("  ⏱️  [ONNX] ModelManager creation: {:.3}s", model_manager_start.elapsed().as_secs_f32());
+        
+        eprintln!("  ⏱️  [ONNX] Total engine new(): {:.3}s", total_start.elapsed().as_secs_f32());
         
         Ok(Self {
             model_manager,
@@ -68,36 +76,48 @@ impl OnnxTtsEngine {
     
     /// Create a new ONNX TTS engine with cross-platform cache directory
     pub async fn new_with_default_cache() -> Result<Self> {
+        use std::time::Instant;
+        let start = Instant::now();
+        
         let proj_dirs = ProjectDirs::from("ai", "Vocalize", "vocalize")
             .ok_or_else(|| anyhow::anyhow!("Failed to determine project directories"))?;
         
         let cache_dir = proj_dirs.cache_dir().join("models");
         
         tracing::info!("ONNX Engine: Using cross-platform cache directory: {:?}", cache_dir);
+        eprintln!("  ⏱️  [ONNX] Project dirs setup: {:.3}s", start.elapsed().as_secs_f32());
         
         Self::new(cache_dir).await
     }
     
     /// Load a specific model for synthesis
-    pub async fn load_model(&mut self, model_id: ModelId) -> Result<()> {
+    pub async fn load_model(&mut self, model_id: ModelId, model_path: String) -> Result<()> {
+        use std::time::Instant;
+        let total_start = Instant::now();
+        
         tracing::info!("🔄 ONNX Engine: Loading model {:?}", model_id);
         
         // 2025 Fix: Always reload model to prevent tensor shape issues
         self.session_pool = None;
         self.current_model = None;
         
-        // Get model path from ModelManager
-        tracing::debug!("📂 Getting model path from ModelManager...");
-        let model_path = self.model_manager.get_model_path(model_id).await
-            .context(format!("Failed to get model path for {:?}", model_id))?;
+        // Use the provided model path directly from Python
+        tracing::debug!("📂 Using model path provided by Python: {}", model_path);
+        let model_path_buf = PathBuf::from(&model_path);
         
-        // Create session pool with multiple sessions for concurrent access
+        // Verify the model file exists
+        if !model_path_buf.exists() {
+            return Err(anyhow::anyhow!("Model file not found at path: {}", model_path));
+        }
+        
+        // Create session pool - use single session for CLI to optimize startup time
         tracing::info!("🏊 Creating session pool for model...");
-        let pool_size = std::thread::available_parallelism()
-            .map(|p| (p.get() / 2).max(1).min(4)) // Use half of CPU cores, max 4
-            .unwrap_or(2); // Fallback to 2 sessions
+        // For CLI usage, we only need 1 session since we process one request at a time
+        // This reduces startup time from ~6.4s to ~1.6s
+        let pool_size = 1; // Single session for fast CLI startup
         
-        let session_pool = OnnxSessionPool::new(&model_path, pool_size).await
+        let session_pool_start = Instant::now();
+        let session_pool = OnnxSessionPool::new(&model_path_buf, pool_size).await
             .context("Failed to create ONNX session pool")?;
         
         tracing::info!("✅ ONNX Engine: Session pool created with {} sessions", pool_size);
@@ -115,6 +135,9 @@ impl OnnxTtsEngine {
         
         self.session_pool = Some(session_pool);
         self.current_model = Some(model_id);
+        
+        eprintln!("  ⏱️  [ONNX] Session pool creation: {:.3}s", session_pool_start.elapsed().as_secs_f32());
+        eprintln!("  ⏱️  [ONNX] Total load_model: {:.3}s", total_start.elapsed().as_secs_f32());
         
         tracing::info!("✅ Successfully loaded neural model: {:?}", model_id);
         Ok(())
@@ -190,14 +213,20 @@ impl OnnxTtsEngine {
         input_ids: Vec<i64>, 
         style_vector: Vec<f32>, 
         speed: f32,
-        model_id: ModelId
+        model_id: ModelId,
+        model_path: String
     ) -> Result<Vec<f32>> {
+        use std::time::Instant;
+        let total_start = Instant::now();
+        
         tracing::debug!("ONNX Engine: Starting synthesis from {} pre-processed tokens", input_ids.len());
         
-        // Ensure correct model is loaded
+        // Ensure correct model is loaded with the provided path
         if self.current_model != Some(model_id) {
-            tracing::debug!("ONNX Engine: Loading model {:?}...", model_id);
-            self.load_model(model_id).await.context("Failed to load model in synthesize")?;
+            tracing::debug!("ONNX Engine: Loading model {:?} from path: {}", model_id, model_path);
+            let load_start = Instant::now();
+            self.load_model(model_id, model_path.clone()).await.context("Failed to load model in synthesize")?;
+            eprintln!("  ⏱️  [ONNX] Model loading in synthesize: {:.3}s", load_start.elapsed().as_secs_f32());
         }
         
         // Validate input constraints
@@ -216,7 +245,8 @@ impl OnnxTtsEngine {
         
         // Perform ONNX inference with timeout protection
         tracing::info!("🔒 Starting synthesis with 30-second timeout protection");
-        match tokio::time::timeout(
+        let _inference_start = Instant::now();
+        let result = match tokio::time::timeout(
             std::time::Duration::from_secs(30),
             self.perform_inference_with_tokens(input_ids, style_vector, speed)
         ).await {
@@ -225,7 +255,10 @@ impl OnnxTtsEngine {
                 tracing::error!("❌ Synthesis timeout after 30 seconds - model may be stuck");
                 Err(anyhow::anyhow!("Synthesis timeout: Model inference hung for >30 seconds. This usually indicates invalid input data or model corruption."))
             }
-        }
+        }?;
+        
+        eprintln!("  ⏱️  [ONNX] Total synthesize_from_tokens: {:.3}s", total_start.elapsed().as_secs_f32());
+        Ok(result)
     }
     
     /// Validate style vector to prevent neural network instability
@@ -277,12 +310,17 @@ impl OnnxTtsEngine {
         style_vector: Vec<f32>, 
         speed: f32
     ) -> Result<Vec<f32>> {
+        use std::time::Instant;
+        let total_start = Instant::now();
+        
         // Acquire session from pool
         tracing::info!("🔄 Acquiring ONNX session from pool...");
+        let acquire_start = Instant::now();
         let session_guard = self.session_pool.as_ref()
             .ok_or_else(|| anyhow::anyhow!("No session pool available"))?
             .acquire_session().await
             .context("Failed to acquire session from pool")?;
+        eprintln!("  ⏱️  [ONNX] Acquire session: {:.3}s", acquire_start.elapsed().as_secs_f32());
         
         let tokens_count = input_ids.len();
         tracing::info!("Creating tensors: {} tokens, {} style values, speed: {}", 
@@ -303,8 +341,10 @@ impl OnnxTtsEngine {
         
         // Run inference with ONNX Runtime
         tracing::info!("🚀 ONNX Engine: Running inference...");
+        let inference_start = Instant::now();
         let audio_data: Vec<f32> = {
             // Create inputs with actual data
+            let tensor_start = Instant::now();
             let mut attempt_inputs: std::collections::HashMap<String, ort::value::Value> = std::collections::HashMap::new();
             
             // Create tokens tensor with pre-processed tokens
@@ -321,6 +361,8 @@ impl OnnxTtsEngine {
             let speed_tensor = ort::value::Tensor::from_array(([1], vec![speed]))
                 .context("Failed to create speed tensor")?;
             attempt_inputs.insert("speed".to_string(), speed_tensor.into());
+            
+            eprintln!("  ⏱️  [ONNX] Tensor creation: {:.3}s", tensor_start.elapsed().as_secs_f32());
             
             // Add logging right before ONNX inference
             tracing::info!("🚀 [{}] Starting ONNX inference with {} inputs...", 
@@ -340,8 +382,11 @@ impl OnnxTtsEngine {
             
             tracing::info!("🔥 [{}] Calling session.run() now...", 
                 chrono::Local::now().format("%H:%M:%S%.3f"));
+            let onnx_run_start = Instant::now();
             let outputs = session.run(attempt_inputs)
                 .map_err(|e| anyhow::anyhow!("ONNX inference failed: {}", e))?;
+            eprintln!("  ⏱️  [ONNX] session.run(): {:.3}s", onnx_run_start.elapsed().as_secs_f32());
+            
             tracing::info!("✅ [{}] ONNX inference completed successfully", 
                 chrono::Local::now().format("%H:%M:%S%.3f"));
             tracing::info!("  - Output tensors: {:?}", outputs.keys().collect::<Vec<_>>());
@@ -363,6 +408,9 @@ impl OnnxTtsEngine {
                 return Err(anyhow::anyhow!("No audio output found in model"));
             }
         };
+        
+        eprintln!("  ⏱️  [ONNX] Total inference: {:.3}s", inference_start.elapsed().as_secs_f32());
+        eprintln!("  ⏱️  [ONNX] Total perform_inference_with_tokens: {:.3}s", total_start.elapsed().as_secs_f32());
         
         tracing::info!("✅ Generated {} audio samples from {} tokens at 24kHz", audio_data.len(), tokens_count);
         Ok(audio_data)

@@ -22,34 +22,8 @@ os.environ.update({
     'BLIS_NUM_THREADS': num_threads,
 })
 
-# Download required NLTK data if not present
-def ensure_nltk_data():
-    """Download required NLTK data if not available."""
-    try:
-        import nltk
-        from nltk.corpus import stopwords
-        from nltk.tag import pos_tag
-        
-        # Test if averaged_perceptron_tagger_eng is available
-        try:
-            pos_tag(['test'])
-        except LookupError:
-            print("📥 Downloading NLTK data (averaged_perceptron_tagger_eng)...")
-            nltk.download('averaged_perceptron_tagger_eng', quiet=True)
-            nltk.download('punkt', quiet=True)  # Often needed with tagger
-            
-    except ImportError:
-        # NLTK not available, skip
-        pass
-    except Exception:
-        # Silent fail for NLTK issues
-        pass
-
-# Download NLTK data on import
-ensure_nltk_data()
-
 # Debug output if verbose mode is detected
-if '--verbose' in sys.argv or os.environ.get('VOCALIZE_DEBUG'):
+if '--verbose' in sys.argv:
     print(f"🔧 Environment setup complete:")
     print(f"   OMP_NUM_THREADS: {os.environ.get('OMP_NUM_THREADS')}")
     print(f"   Threading: Multi-threaded mode ({num_threads} threads)")

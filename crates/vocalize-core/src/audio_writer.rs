@@ -1,7 +1,7 @@
 //! Audio file writing with support for multiple formats.
 
 use crate::error::{VocalizeError, VocalizeResult};
-use crate::tts_engine::AudioData;
+use crate::AudioData;
 use crate::wav_writer::{WavWriter, WavSpec};
 use std::path::Path;
 use tracing::{debug, info, warn};

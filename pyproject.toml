@@ -1,3 +1,10 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+manifest-path = "crates/vocalize-rust/Cargo.toml"
+
 [project]
 name = "vocalize"
 description = "High-performance text-to-speech synthesis library"
@@ -34,6 +41,9 @@ dependencies = [
     "ttstokenizer>=1.1.0",
     "tinynumpy>=1.2.1",
     "platformdirs>=4.0.0",
+    "toml>=0.10.2",  # For configuration file management
+    "onnxruntime>=1.16.0",  # Required for graph optimization and quantization
+    "onnx>=1.14.0",  # Required for model manipulation
 ]
 
 
