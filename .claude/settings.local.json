@@ -97,7 +97,8 @@
       "Bash(./download_and_extract_vcredist_dlls.sh:*)",
       "Bash(cabextract:*)",
       "Bash(./test_extract_vcredist.sh:*)",
-      "Bash(./test_simple_extract.sh:*)"
+      "Bash(./test_simple_extract.sh:*)",
+      "Bash(./tools/test_rust_ggml.sh:*)"
     ],
     "deny": []
   }

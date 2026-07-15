@@ -24,6 +24,81 @@ pub use audio_writer::PyAudioWriter as AudioWriter;
 pub use audio_device::PyAudioDevice as AudioDevice;
 
 
+/// Fast text to phonemes processing using GGML engine
+#[pyfunction]
+fn process_text_to_phonemes(text: String) -> PyResult<Vec<i64>> {
+    use vocalize_core::ggml_engine::GGMLTtsEngine;
+    use std::path::PathBuf;
+    
+    // Create GGML engine with phoneme processor
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| PyVocalizeError::new_err(format!("Failed to create runtime: {}", e)))?;
+    
+    rt.block_on(async {
+        let engine = GGMLTtsEngine::new(PathBuf::from(".")).await
+            .map_err(|e| PyVocalizeError::new_err(format!("Failed to create GGML engine: {}", e)))?;
+        
+        engine.process_text(&text)
+            .map_err(|e| PyVocalizeError::new_err(format!("Phoneme processing failed: {}", e)))
+    })
+}
+
+/// GGML-based TTS synthesis using Piper models
+#[pyfunction]
+#[pyo3(signature = (input_ids, style_vector, speed, model_id, model_path))]
+fn synthesize_ggml(
+    input_ids: Vec<i64>,
+    style_vector: Vec<f32>,
+    speed: f32,
+    model_id: String,
+    model_path: String
+) -> PyResult<Vec<f32>> {
+    use std::time::Instant;
+    use vocalize_core::{ggml_engine::GGMLTtsEngine, model::ModelId};
+    
+    let total_start = Instant::now();
+    
+    // Validate inputs
+    if input_ids.is_empty() {
+        return Err(PyVocalizeError::new_err("Input IDs cannot be empty".to_string()));
+    }
+    
+    if style_vector.len() != 256 {
+        return Err(PyVocalizeError::new_err(format!("Style vector must be 256 dimensions, got {}", style_vector.len())));
+    }
+    
+    println!("🚀 GGML TTS: {} tokens, speed: {}", input_ids.len(), speed);
+    
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| PyVocalizeError::new_err(format!("Failed to create runtime: {}", e)))?;
+    
+    rt.block_on(async {
+        let mut engine = GGMLTtsEngine::new_with_default_cache().await
+            .map_err(|e| PyVocalizeError::new_err(format!("Failed to create GGML engine: {}", e)))?;
+        
+        // Map model ID
+        let model = match model_id.as_str() {
+            "piper-amy-medium" => ModelId::Kokoro, // Using Kokoro enum temporarily
+            "piper-amy-low" => ModelId::Kokoro,
+            _ => ModelId::Kokoro,
+        };
+        
+        let audio_data = engine.synthesize_from_tokens(
+            input_ids,
+            style_vector,
+            speed,
+            model,
+            model_path
+        ).await
+        .map_err(|e| PyVocalizeError::new_err(format!("GGML synthesis failed: {}", e)))?;
+        
+        eprintln!("  ⏱️  [GGML] Total time: {:.3}s", total_start.elapsed().as_secs_f32());
+        println!("✅ GGML synthesis completed: {} samples", audio_data.len());
+        
+        Ok(audio_data)
+    })
+}
+
 /// 2025 Neural TTS synthesis using pre-processed tokens (new phoneme pipeline)
 #[pyfunction]
 #[pyo3(signature = (input_ids, style_vector, speed, model_id, model_path))]
@@ -338,6 +413,10 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     // Add neural TTS functions
     m.add_function(wrap_pyfunction!(synthesize_from_tokens_neural, m)?)?;
     m.add_function(wrap_pyfunction!(save_audio_neural, m)?)?;
+    
+    // Add GGML functions
+    m.add_function(wrap_pyfunction!(process_text_to_phonemes, m)?)?;
+    m.add_function(wrap_pyfunction!(synthesize_ggml, m)?)?;
     
     // Add constants
     m.add("DEFAULT_SAMPLE_RATE", vocalize_core::DEFAULT_SAMPLE_RATE)?;

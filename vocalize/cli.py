@@ -275,6 +275,57 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
                 print(f"  ⏱️  Rust synthesis call: {rust_call_duration:.3f}s")
             
             return VocalizeComponents.AudioData(samples)
+        elif model.startswith("piper-"):
+            # Use GGML engine for Piper models
+            print(f"🎯 Using GGML engine for Piper model: {model}")
+            
+            # Import the Rust GGML bindings
+            with Timer("Import vocalize_rust", verbose):
+                from . import vocalize_rust
+            
+            # Step 1: Convert text to phonemes using fast Rust processor
+            with Timer("Process text to phonemes", verbose):
+                phoneme_ids = vocalize_rust.process_text_to_phonemes(text)
+            
+            print(f"📝 Generated {len(phoneme_ids)} phoneme tokens")
+            
+            # Step 2: Get model path
+            cache_base = platformdirs.user_cache_dir("vocalize", "Vocalize")
+            cache_dir = Path(cache_base) / "models" / "models--direct_download" / "local"
+            
+            # Map model ID to filename
+            model_filenames = {
+                "piper-amy-medium": "en_US-amy-medium.gguf",
+                "piper-amy-low": "en_US-amy-low.gguf",
+            }
+            
+            model_filename = model_filenames.get(model, f"{model}.gguf")
+            model_path = str(cache_dir / model_filename)
+            
+            if not Path(model_path).exists():
+                raise RuntimeError(f"GGUF model not found at {model_path}")
+            
+            # Step 3: Create simple style vector for Piper (neutral voice)
+            style_vector = [0.0] * 256  # Neutral style embedding
+            
+            # Step 4: Synthesize using GGML
+            print(f"🚀 Synthesizing with GGML: {len(phoneme_ids)} tokens, speed: {speed}")
+            
+            rust_call_start = time.perf_counter()
+            samples = vocalize_rust.synthesize_ggml(
+                phoneme_ids,
+                style_vector,
+                speed,
+                model,
+                model_path
+            )
+            rust_call_duration = time.perf_counter() - rust_call_start
+            
+            print(f"✅ Got {len(samples)} audio samples from GGML synthesis")
+            if verbose:
+                print(f"  ⏱️  GGML synthesis call: {rust_call_duration:.3f}s")
+            
+            return VocalizeComponents.AudioData(samples)
         else:
             # Fall back to the original synthesis for non-Kokoro models
             return VocalizeComponents.synthesize_text(text, voice, speed, pitch)

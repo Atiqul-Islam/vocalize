@@ -13,15 +13,15 @@
 //! ## Example
 //!
 //! ```rust,no_run
-//! use vocalize_core::{OnnxTtsEngine, AudioDevice};
+//! use vocalize_core::{GGMLTtsEngine, AudioDevice};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
-//!     // Use OnnxTtsEngine directly for neural TTS
-//!     let engine = OnnxTtsEngine::new_with_default_cache().await?;
+//!     // Use GGMLTtsEngine for fast neural TTS
+//!     let engine = GGMLTtsEngine::new_with_default_cache().await?;
 //!     
 //!     // In practice, synthesis is done through Python API
-//!     // which handles tokenization and model selection
+//!     // which handles model selection and voice management
 //!     
 //!     Ok(())
 //! }
@@ -38,7 +38,9 @@ pub mod audio_device;
 pub mod audio_writer;
 pub mod error;
 pub mod model;
+#[cfg(feature = "onnx")]
 pub mod onnx_engine;
+pub mod ggml_engine;
 pub mod voice_manager;
 pub mod wav_writer;
 
@@ -47,7 +49,9 @@ pub use audio_device::{AudioConfig, AudioDevice, AudioDeviceInfo, PlaybackState}
 pub use audio_writer::{AudioFormat, AudioWriter, EncodingSettings};
 pub use error::{VocalizeError, VocalizeResult};
 pub use model::{ModelId, ModelInfo, ModelManager, ModelConfig};
+#[cfg(feature = "onnx")]
 pub use onnx_engine::OnnxTtsEngine;
+pub use ggml_engine::GGMLTtsEngine;
 /// Audio data type - 32-bit floating point samples
 pub type AudioData = Vec<f32>;
 pub use voice_manager::{Gender, Voice, VoiceManager, VoiceStyle};

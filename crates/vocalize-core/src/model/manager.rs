@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use anyhow::{Result, Context};
+#[cfg(feature = "onnx")]
 use ort::session::Session;
 use directories::ProjectDirs;
 
@@ -16,7 +17,10 @@ use super::types::{ModelId, ModelInfo};
 pub struct ModelManager {
     /// Directory for caching downloaded models
     pub cache_dir: PathBuf,
+    #[cfg(feature = "onnx")]
     loaded_models: Arc<RwLock<HashMap<ModelId, Arc<Mutex<Session>>>>>,
+    #[cfg(not(feature = "onnx"))]
+    _phantom: std::marker::PhantomData<()>,
 }
 
 impl ModelManager {
@@ -29,7 +33,10 @@ impl ModelManager {
         
         Self {
             cache_dir,
+            #[cfg(feature = "onnx")]
             loaded_models: Arc::new(RwLock::new(HashMap::new())),
+            #[cfg(not(feature = "onnx"))]
+            _phantom: std::marker::PhantomData,
         }
     }
     
@@ -140,6 +147,7 @@ impl ModelManager {
     }
     
     /// Load a model into ONNX Runtime session from Python-managed cache
+    #[cfg(feature = "onnx")]
     pub async fn load_model(&self, model_id: ModelId) -> Result<Arc<Mutex<Session>>> {
         // Check if already loaded
         {
@@ -188,7 +196,10 @@ impl ModelManager {
         let (opt_level, intra_threads, inter_threads, memory_pattern) = if is_int8_model {
             tracing::info!("INT8 quantized model detected - using conservative settings");
             (
+                #[cfg(feature = "onnx")]
                 ort::session::builder::GraphOptimizationLevel::Level1,
+                #[cfg(not(feature = "onnx"))]
+                1,
                 std::cmp::min(4, physical_cores),
                 2,
                 false
@@ -196,13 +207,17 @@ impl ModelManager {
         } else {
             tracing::info!("FP32 model detected - using performance settings");
             (
+                #[cfg(feature = "onnx")]
                 ort::session::builder::GraphOptimizationLevel::Level3,
+                #[cfg(not(feature = "onnx"))]
+                3,
                 std::cmp::min(physical_cores, 8),
                 std::cmp::min(4, std::cmp::max(2, physical_cores / 3)),
                 true
             )
         };
         
+        #[cfg(feature = "onnx")]
         let session = Session::builder()?
             .with_optimization_level(opt_level)?
             .with_intra_threads(intra_threads)?

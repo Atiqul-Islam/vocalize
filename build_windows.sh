@@ -289,6 +289,85 @@ for src_dll in "${!ESSENTIAL_DLLS[@]}"; do
     fi
 done
 
+# Step 3.5: Download and extract espeak-ng DLLs
+echo ""
+echo "Step 3.5: Downloading espeak-ng for Windows..."
+echo "========================================="
+
+cd "$TEMP_DIR"
+
+# Check if we already have espeak-ng cached
+ESPEAK_CACHE="$CACHE_DIR/espeak-ng-X64.msi"
+ESPEAK_VERSION="1.51.1"
+ESPEAK_URL="https://github.com/espeak-ng/espeak-ng/releases/download/${ESPEAK_VERSION}/espeak-ng-X64.msi"
+
+if [ -f "$ESPEAK_CACHE" ]; then
+    print_success "Using cached espeak-ng MSI"
+    cp "$ESPEAK_CACHE" espeak-ng.msi
+else
+    echo "Downloading espeak-ng ${ESPEAK_VERSION}..."
+    curl -L -o espeak-ng.msi "$ESPEAK_URL" || {
+        print_error "Failed to download espeak-ng"
+        exit 1
+    }
+    
+    # Cache for future use
+    cp espeak-ng.msi "$ESPEAK_CACHE"
+fi
+
+# Extract MSI using msiextract (or 7z as fallback)
+echo "Extracting espeak-ng MSI..."
+if command -v msiextract >/dev/null 2>&1; then
+    msiextract espeak-ng.msi || {
+        print_error "Failed to extract espeak-ng MSI with msiextract"
+        exit 1
+    }
+elif command -v 7z >/dev/null 2>&1; then
+    7z x espeak-ng.msi -y || {
+        print_error "Failed to extract espeak-ng MSI with 7z"
+        exit 1
+    }
+else
+    print_error "Neither msiextract nor 7z found. Install with: sudo apt-get install msitools p7zip-full"
+    exit 1
+fi
+
+# Copy espeak-ng files
+echo "Copying espeak-ng files..."
+ESPEAK_COPIED=0
+
+# Find and copy espeak-ng.dll
+if [ -f "Program Files/eSpeak NG/espeak-ng.dll" ]; then
+    cp "Program Files/eSpeak NG/espeak-ng.dll" "$PACKAGE_DIR/"
+    echo "  Copied: espeak-ng.dll"
+    ESPEAK_COPIED=$((ESPEAK_COPIED + 1))
+elif [ -f "ProgramFilesFolder/eSpeak NG/espeak-ng.dll" ]; then
+    cp "ProgramFilesFolder/eSpeak NG/espeak-ng.dll" "$PACKAGE_DIR/"
+    echo "  Copied: espeak-ng.dll"
+    ESPEAK_COPIED=$((ESPEAK_COPIED + 1))
+else
+    print_warning "Could not find espeak-ng.dll in extracted MSI"
+fi
+
+# Copy espeak-ng-data directory
+if [ -d "Program Files/eSpeak NG/espeak-ng-data" ]; then
+    cp -r "Program Files/eSpeak NG/espeak-ng-data" "$PACKAGE_DIR/"
+    echo "  Copied: espeak-ng-data directory"
+    ESPEAK_COPIED=$((ESPEAK_COPIED + 1))
+elif [ -d "ProgramFilesFolder/eSpeak NG/espeak-ng-data" ]; then
+    cp -r "ProgramFilesFolder/eSpeak NG/espeak-ng-data" "$PACKAGE_DIR/"
+    echo "  Copied: espeak-ng-data directory"
+    ESPEAK_COPIED=$((ESPEAK_COPIED + 1))
+else
+    print_warning "Could not find espeak-ng-data directory in extracted MSI"
+fi
+
+if [ $ESPEAK_COPIED -eq 0 ]; then
+    print_warning "No espeak-ng files were copied. TTS will use fallback phoneme processor."
+fi
+
+cd "$PROJECT_DIR"
+
 # Step 4: Recreate the wheel
 echo ""
 echo "Step 4: Creating updated wheel..."
@@ -342,6 +421,7 @@ echo ""
 echo "Summary:"
 echo "  - ONNX Runtime DLLs: $ONNX_COPIED"
 echo "  - VC++ Runtime DLLs: $VC_COPIED"
+echo "  - eSpeak-ng files:   $ESPEAK_COPIED"
 echo "  - Total DLLs/PYDs:   $DLL_COUNT"
 echo ""
 echo "The bundled wheel includes all required DLLs and can be"

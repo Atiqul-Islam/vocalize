@@ -92,6 +92,22 @@ class ModelManager:
             size_mb=410,  # Combined model + voices size
             description="2025 optimized neural TTS model (82M parameters)"
         ),
+        "piper-amy-medium": ModelInfo(
+            id="piper-amy-medium",
+            name="Piper Amy (Medium)",
+            repo_id="direct_download",
+            files=["en_US-amy-medium.gguf"],
+            size_mb=40,  # After GGUF conversion
+            description="Piper VITS model - American English female, medium quality"
+        ),
+        "piper-amy-low": ModelInfo(
+            id="piper-amy-low",
+            name="Piper Amy (Low/Fast)",
+            repo_id="direct_download",
+            files=["en_US-amy-low.gguf"],
+            size_mb=20,
+            description="Piper VITS model - American English female, fast inference"
+        ),
     }
     
     def __init__(self, cache_dir: Optional[str] = None):
@@ -196,8 +212,11 @@ class ModelManager:
         
         try:
             # Handle 2025 direct download models
-            if model_info.repo_id == "direct_download" and model_id == "kokoro":
-                return self._download_kokoro_2025(force)
+            if model_info.repo_id == "direct_download":
+                if model_id == "kokoro":
+                    return self._download_kokoro_2025(force)
+                elif model_id.startswith("piper-"):
+                    return self._download_piper_model(model_id, force)
             
             # Handle traditional HuggingFace models
             hf_hub_download, HfApi = _import_huggingface_hub()
@@ -277,6 +296,109 @@ class ModelManager:
         
         print("✅ Successfully downloaded 2025 Kokoro model files")
         return True
+    
+    def _download_piper_model(self, model_id: str, force: bool = False) -> bool:
+        """Download and convert Piper TTS models to GGUF format."""
+        import subprocess
+        import sys
+        from pathlib import Path
+        
+        # Map model IDs to Piper model names
+        piper_model_map = {
+            "piper-amy-medium": "en_US-amy-medium",
+            "piper-amy-low": "en_US-amy-low",
+        }
+        
+        piper_name = piper_model_map.get(model_id)
+        if not piper_name:
+            print(f"Error: Unknown Piper model '{model_id}'")
+            return False
+        
+        # Create local directory
+        model_local_dir = self.cache_dir / "models--direct_download" / "local"
+        model_local_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Check if GGUF file already exists
+        gguf_file = model_local_dir / f"{piper_name}.gguf"
+        if gguf_file.exists() and not force:
+            print(f"  ✓ {gguf_file.name} already exists")
+            return True
+        
+        # Find tools directory
+        project_root = Path(__file__).parent.parent
+        tools_dir = project_root / "tools"
+        
+        # Step 1: Download Piper ONNX model
+        print(f"  📄 Downloading Piper model {piper_name}...")
+        download_script = tools_dir / "download_piper_models.py"
+        
+        if not download_script.exists():
+            print(f"Error: Download script not found at {download_script}")
+            return False
+        
+        try:
+            # Run download script
+            result = subprocess.run(
+                [sys.executable, str(download_script), piper_name],
+                capture_output=True,
+                text=True,
+                cwd=str(project_root)
+            )
+            
+            if result.returncode != 0:
+                print(f"Error downloading Piper model: {result.stderr}")
+                return False
+            
+            print("  ✓ Downloaded Piper ONNX model")
+            
+            # Step 2: Convert to GGUF
+            print(f"  🔄 Converting to GGUF format...")
+            convert_script = tools_dir / "convert_piper_to_gguf.py"
+            
+            if not convert_script.exists():
+                print(f"Error: Conversion script not found at {convert_script}")
+                return False
+            
+            # Find downloaded ONNX file
+            onnx_file = project_root / "models" / "piper" / f"{piper_name}.onnx"
+            if not onnx_file.exists():
+                print(f"Error: Downloaded ONNX file not found at {onnx_file}")
+                return False
+            
+            # Run conversion
+            result = subprocess.run(
+                [sys.executable, str(convert_script), str(onnx_file), str(gguf_file)],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"Error converting to GGUF: {result.stderr}")
+                return False
+            
+            print(f"  ✓ Converted to GGUF: {gguf_file.name}")
+            
+            # Step 3: Download config file if needed
+            config_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/{piper_name.split('-')[-1]}/{piper_name}.json"
+            config_file = model_local_dir / f"{piper_name}.json"
+            
+            if not config_file.exists():
+                requests = _import_requests()
+                if requests:
+                    try:
+                        response = requests.get(config_url)
+                        response.raise_for_status()
+                        config_file.write_text(response.text)
+                        print(f"  ✓ Downloaded config: {config_file.name}")
+                    except Exception as e:
+                        print(f"  ⚠️  Could not download config: {e}")
+            
+            print(f"✅ Successfully downloaded and converted {model_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to process Piper model: {e}")
+            return False
     
     def list_available_models(self) -> List[str]:
         """List all available models."""

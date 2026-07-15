@@ -9,7 +9,7 @@ homepage.workspace = true
 documentation.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Core TTS engine for Vocalize - high-performance text-to-speech synthesis"
+description = "Core TTS engine for Vocalize - high-performance text-to-speech synthesis with GGML"
 
 [dependencies]
 # Core dependencies
@@ -19,44 +19,54 @@ thiserror.workspace = true
 serde.workspace = true
 tracing.workspace = true
 
-# ONNX Runtime with load-dynamic for bundled DLL distribution (like ONNX Runtime PyPI package)
-ort = { version = "2.0.0-rc.10", features = ["load-dynamic"], default-features = false }
+# GGML for fast inference (replacing ONNX)
+# Removed Candle dependencies to fix cross-compilation issues
+# Using simple tensor wrapper for mock implementation
+
+# Memory mapping for instant model loading
+memmap2 = "0.9"
+
+# Fast serialization
+bincode = "1.3"
+rmp-serde = "1.1"  # MessagePack for metadata
 
 # ndarray for tensor operations
 ndarray = "0.15"
+half = "2.3"  # For f16 support
 
-# Model management and downloads
-hf-hub = { version = "0.3", features = ["tokio"] }  # HuggingFace Hub integration
-reqwest.workspace = true  # Cross-platform TLS with rustls
-sha2 = "0.10"                  # Model integrity verification
-
-# Archive extraction (still needed for model downloads)
-tar = "0.4"                    # TAR archive extraction (Linux/macOS)
-flate2 = "1.0"                 # GZ decompression
-
-# Text processing
-tokenizers = "0.15"            # HuggingFace tokenizers
-unicode-normalization = "0.1"  # Text normalization
+# Text processing - espeak phonemes for Piper
+# espeakng = "0.1"  # Removed - using pre-built DLLs instead to avoid cross-compilation issues
 
 # Configuration
-toml = "0.8"                   # TOML config file parsing
-
+toml = "0.8"
 serde_json = "1.0"
+
+# Text processing
+unicode-normalization = "0.1"
+
+# ONNX Runtime (optional for fallback)
+ort = { version = "2.0.0-rc.2", optional = true }
 
 # Audio file writing (no external system deps)
 hound = "3.5"  # WAV writing
-# mp3lame-encoder = "0.1"  # MP3 encoding (optional, commented for now)
 
 # Utilities
 uuid.workspace = true
 once_cell.workspace = true
-glob = "0.3"  # Pattern matching for file discovery
-directories = "5.0"  # Cross-platform application directories
+glob = "0.3"
+directories = "5.0"
 parking_lot.workspace = true
 rayon.workspace = true
-chrono = "0.4"  # For timestamp logging
-num_cpus = "1.16"  # CPU core detection for optimal threading
+chrono = "0.4"
+num_cpus = "1.16"
 
+# Binary serialization for phoneme dictionaries
+byteorder = "1.5"
+lz4_flex = "0.11"  # Fast compression for embedded data
+
+[build-dependencies]
+# For embedding phoneme data at compile time
+include_dir = "0.7"
 
 [dev-dependencies]
 # Existing test deps
@@ -65,20 +75,21 @@ proptest.workspace = true
 tempfile.workspace = true
 env_logger.workspace = true
 tokio-test = "0.4"
-serde_json = "1.0"
 
-# Comprehensive testing tools
-mockall = "0.12"           # Mock objects for external dependencies
-wiremock = "0.6"           # HTTP mocking for model downloads
-assert_fs = "1.1"          # File system testing
-predicates = "3.1"         # Assertion predicates
-test-log = "0.2"           # Capture logs in tests
-serial_test = "3.1"        # Sequential test execution
-rstest = "0.18"            # Parameterized tests
+# Testing tools
+mockall = "0.12"
+assert_fs = "1.1"
+predicates = "3.1"
+test-log = "0.2"
+serial_test = "3.1"
+rstest = "0.18"
 
 [features]
 default = []
-# Removed audio feature - now built-in with OS native APIs
+# Feature for embedding models directly in binary
+embedded-models = []
+# ONNX backend support
+onnx = ["ort"]
 
 [[bench]]
 name = "tts_benchmark"

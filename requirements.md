@@ -1,3 +1,6 @@
+
+Requierements 
+
 1. inference should be offline 
 2. less then 2 second before the model starts speaking 
 3. no fall back options 
