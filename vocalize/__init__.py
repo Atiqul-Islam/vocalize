@@ -10,8 +10,7 @@ from . import _env_setup
 
 from ._version import __version__
 
-__author__ = "Vocalize Contributors"
-__email__ = "noreply@vocalize.ai"
+__author__ = "Atiqul Islam"
 __description__ = "High-performance text-to-speech synthesis library"
 
 # Try to import Rust bindings, fall back to Python-only implementation
@@ -148,8 +147,7 @@ MAX_TEXT_LENGTH = 100000
 
 __all__ = [
     "__version__",
-    "__author__", 
-    "__email__",
+    "__author__",
     "__description__",
     "_HAS_RUST_BINDINGS",
     "DEFAULT_SAMPLE_RATE",

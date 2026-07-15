@@ -91,7 +91,7 @@ To request a commercial license, please open a GitHub issue:
 
 ### 📋 **Submit a License Request**
 
-1. Go to: [github.com/vocalize/vocalize/issues](https://github.com/vocalize/vocalize/issues)
+1. Go to: [github.com/Atiqul-Islam/vocalize/issues](https://github.com/Atiqul-Islam/vocalize/issues)
 2. Click "New Issue"
 3. Select "Commercial License Request" template (or create a new issue)
 4. Use title: "Commercial License Request - [Your Company Name]"
@@ -99,7 +99,7 @@ To request a commercial license, please open a GitHub issue:
 
 ### 🔒 **Privacy Note**
 - Initial discussions happen publicly on GitHub
-- Sensitive details (pricing, contracts) move to private email after initial contact
+- Sensitive details (pricing, contracts) move to a private channel after initial contact
 - You can request immediate private discussion if needed
 
 ### ⏱️ **Response Time**

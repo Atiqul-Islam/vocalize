@@ -81,7 +81,7 @@ pip install maturin
 #### Build Process
 ```bash
 # Clone and setup
-git clone https://github.com/vocalize/vocalize.git
+git clone https://github.com/Atiqul-Islam/vocalize.git
 cd vocalize
 
 # Build Linux wheel with bundled ONNX Runtime
@@ -121,7 +121,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 #### Build Process
 ```bash
 # Clone and setup
-git clone https://github.com/vocalize/vocalize.git
+git clone https://github.com/Atiqul-Islam/vocalize.git
 cd vocalize
 
 # Build macOS wheel with bundled ONNX Runtime

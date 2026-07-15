@@ -3,7 +3,7 @@ name = "vocalize"
 description = "High-performance text-to-speech synthesis library"
 license = {text = "PolyForm-Noncommercial-1.0.0"}
 authors = [
-    {name = "Vocalize Contributors", email = "noreply@vocalize.ai"},
+    {name = "Atiqul Islam"},
 ]
 keywords = ["tts", "text-to-speech", "audio", "speech", "ai", "rust", "python"]
 classifiers = [
@@ -38,10 +38,10 @@ dependencies = [
 
 
 [project.urls]
-Homepage = "https://github.com/vocalize/vocalize"
-Repository = "https://github.com/vocalize/vocalize"
-Documentation = "https://docs.rs/vocalize"
-"Bug Tracker" = "https://github.com/vocalize/vocalize/issues"
+Homepage = "https://github.com/Atiqul-Islam/vocalize"
+Repository = "https://github.com/Atiqul-Islam/vocalize"
+Documentation = "https://github.com/Atiqul-Islam/vocalize#readme"
+"Bug Tracker" = "https://github.com/Atiqul-Islam/vocalize/issues"
 
 [project.scripts]
 vocalize = "vocalize.cli:main"
