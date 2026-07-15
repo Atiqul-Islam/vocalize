@@ -12,7 +12,7 @@ Vocalize is dual-licensed:
   - ✅ Non-profit organizations
   
 - **Commercial use**: Requires a commercial license
-  - 📋 Request via: [GitHub Issues](https://github.com/vocalize/vocalize/issues)
+  - 📋 Request via: [GitHub Issues](https://github.com/Atiqul-Islam/vocalize/issues)
   - 📄 See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for details
 
 For questions about which license you need, please see our [commercial licensing guide](COMMERCIAL-LICENSE.md).

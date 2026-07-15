@@ -63,8 +63,7 @@ We commit to:
 ## Questions?
 
 For licensing questions or concerns:
-- **Email**: licenses@vocalize.ai
-- **GitHub Discussions**: [License Evolution Discussion](https://github.com/vocalize/vocalize/discussions)
+- **GitHub Issues**: [Open an issue](https://github.com/Atiqul-Islam/vocalize/issues)
 
 ---
 
