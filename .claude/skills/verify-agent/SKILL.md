@@ -55,6 +55,8 @@ If the project has `test/playwright.config.ts`: run `npx bddgen` from project ro
 
 If pytest-bdd: skip — pytest discovers features directly.
 
+If cucumber-rs (this repo): skip — steps are compiled into the `bdd` test target; a broken step file shows up as a compile error of that target, which you report as `ERROR`.
+
 If bddgen fails, return `ERROR` with the bddgen output.
 
 ## Phase 3: Start App (if needed)
@@ -82,20 +84,26 @@ npx playwright test --config test/playwright.config.ts --reporter=list,html --gr
 pytest test/features/ -k "<feature-name>" -v
 ```
 
-For `tdd_green_check`, target the specific unit test:
+**BDD (cucumber-rs, run from `crates/`):**
 ```bash
-pytest test/unit/test_<feature>.py::Test<Feature>::test_<slug> -v
+BDD_FEATURE=test/features/<feature-name>.feature cargo test -p vocalize-core --test bdd
 ```
 
-For `regression`, omit the `--grep` / `-k` filter to run everything.
+For `tdd_green_check`, target the specific unit test:
+```bash
+pytest test/unit/test_<feature>.py::Test<Feature>::test_<slug> -v          # Python
+cargo test -p vocalize-core --test spec_<feature_snake> test_<slug>       # Rust, from crates/
+```
+
+For `regression`, omit the `--grep` / `-k` / `BDD_FEATURE` filter to run everything — for Rust that is `cargo test --workspace --lib` plus `cargo test -p vocalize-core --tests` (all integration, spec, and BDD targets).
 
 Capture pass/fail counts and per-scenario error messages.
 
 ## Phase 4.5: Execute Unit Tests
 
-- `red_check`, `full_green_check`, `verify_post_simplify`: feature-scoped unit tests at `test/unit/test_<feature_snake>.py`.
+- `red_check`, `full_green_check`, `verify_post_simplify`: feature-scoped unit tests at `test/unit/test_<feature_snake>.py` (Python) or `crates/vocalize-core/tests/spec_<feature_snake>.rs` (Rust: `cargo test -p vocalize-core --test spec_<feature_snake>`).
 - `tdd_green_check`: only the specific test method.
-- `regression`: full `pytest test/unit/ -v`.
+- `regression`: full `pytest test/unit/ -v` (Python) / the full cargo sweep above (Rust).
 
 If no unit test files exist for the feature, mark `unit: { total: 0, ..., skipped: true }`.
 

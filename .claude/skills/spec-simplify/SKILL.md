@@ -27,9 +27,9 @@ The arguments are provided via `$ARGUMENTS`.
    - If no arguments, scope to all recently modified implementation files
 
 2. **Scope rules** — only implementation files:
-   - **Include**: Implementation source files (typically `src/`, `app/`, `lib/`, `config/`)
-   - **Exclude**: `test/` (specs, features, steps, unit tests), `.venv/`, `node_modules/`, `.claude/`, `docs/`, `package.json`, `package-lock.json`
-   - **Note**: Unit test files (`test/unit/test_*.py`) are test artifacts and must never be simplified — they are verified in the GREEN step
+   - **Include**: Implementation source files (typically `src/`, `app/`, `lib/`, `config/`, `crates/*/src/`)
+   - **Exclude**: `test/` (specs, features, steps, unit tests), `crates/*/tests/`, `.venv/`, `node_modules/`, `.claude/`, `docs/`, `package.json`, `package-lock.json`
+   - **Note**: Unit test files (`test/unit/test_*.py`, `crates/*/tests/spec_*.rs`) are test artifacts and must never be simplified — they are verified in the GREEN step
 
 3. **If a requested file falls outside scope**, warn the user and skip it. Specs, features, and step definitions must never be simplified — they are test artifacts.
 

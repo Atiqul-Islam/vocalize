@@ -69,8 +69,8 @@ The feature name/description is provided via `$ARGUMENTS`.
 - Every Expected Behavior bullet MUST have a corresponding Acceptance Criterion. If a behavior cannot be expressed as a testable UI criterion, move it to Implementation Requirements
 - Include at least one happy path, one edge case, and one error case
 - Acceptance Criteria are concrete, UI-testable conditions (these become Gherkin scenarios)
-- Implementation Requirements (optional) capture non-UI concerns: storage backends, hashing algorithms, performance constraints, etc. These are tested via `pytest` unit tests, NOT Gherkin scenarios
-- `/spec-compile` will generate a `pytest` test stub for each Implementation Requirement — write them as concrete, testable assertions
+- Implementation Requirements (optional) capture non-surface concerns: storage backends, hashing algorithms, performance constraints, etc. These are tested via unit tests (`pytest` for Python, `cargo test` for Rust), NOT Gherkin scenarios
+- `/spec-compile` will generate a unit test stub for each Implementation Requirement — write them as concrete, testable assertions
 - Each Implementation Requirement should be independently verifiable — avoid compound requirements (e.g., split "Passwords are hashed with bcrypt and salted" into two separate requirements)
 - Use the user's natural language — no technical jargon
 

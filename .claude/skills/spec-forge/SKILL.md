@@ -85,6 +85,8 @@ Then identical multi-round audit loop as /spec-build:
 
 SendMessage to forge-spec-agent: `compile_to_gherkin`. Generates `test/features/<slug>.feature` + step defs + (if Implementation Requirements present) unit test stubs.
 
+Artifact locations are language-dependent: Python step defs/stubs live in `test/steps/` + `test/unit/`; Rust (this repo) step defs live in `crates/vocalize-core/tests/bdd/steps/` and unit stubs in `crates/vocalize-core/tests/spec_<slug_snake>.rs`. The spec-compile/spec-agent skills carry the exact shapes.
+
 ## Phase 2.5: Implementation Plan (NEW vs /spec-build)
 
 Supervisor invokes `superpowers:writing-plans` via Skill tool, passing:

@@ -44,30 +44,39 @@ Thresholds:
 - **fail: CRAP > 8** (blocking)
 - target: CRAP ≤ 4
 
-#### Preflight
-Run `radon --version` and `python -c "import coverage"`. If either missing, set `crap_report: { skipped: true, reason: "tool_missing" }`.
+Follow the language paths defined in `.claude/skills/spec-crap/SKILL.md` — it is the single source of truth for CRAP commands. Summary:
 
-If `src/` doesn't exist, set `crap_report: { skipped: true, reason: "no_src" }`.
+#### Preflight
+- **Python path** (applies if `src/` with Python exists): `radon --version` and `python -c "import coverage"`. Missing → `crap_report: { skipped: true, reason: "tool_missing" }`.
+- **Rust path** (applies if a cargo workspace exists — this repo: `crates/Cargo.toml`): `cargo llvm-cov --version` and `uvx lizard --version`. Missing → same skipped shape.
+- Neither layout present → `crap_report: { skipped: true, reason: "no_src" }`.
 
 #### Coverage JSON
-Reuse `test-results/coverage.json` if <10 min old. Otherwise:
+Reuse `test-results/coverage.json` / `test-results/rust-coverage.json` if <10 min old. Otherwise:
 ```bash
+# Python:
 pytest --cov=src --cov-report=json:test-results/coverage.json test/unit/ -q
+# Rust (from crates/; add further green test targets as they come online):
+cargo llvm-cov -p vocalize-core --lib --json --output-path ../test-results/rust-coverage.json
 ```
 
-If pytest exits 5 (no tests), treat as 0% coverage, still run complexity.
+If pytest exits 5 (no tests), treat as 0% coverage, still run complexity. If the cargo test run fails, return `ERROR` — a broken build is not a coverage number.
 
-#### Cyclomatic Complexity JSON
+#### Cyclomatic Complexity
 ```bash
+# Python:
 radon cc -s --json src/ > test-results/radon-cc.json
+# Rust:
+uvx lizard -l rust --csv crates/vocalize-core/src/ crates/vocalize-rust/src/ > test-results/lizard-cc.csv
 ```
 (Or limit to changed files if `context.changed_only == true`.)
 
 #### Compute
 ```bash
-python test/tools/crap.py
+python3 test/tools/crap.py       # Python path
+python3 test/tools/crap_rust.py  # Rust path
 ```
-Parse output. Populate `crap_report` block of the verdict.
+Parse output. Populate `crap_report` block of the verdict (merge both paths if both ran).
 
 ### Step 2: Local Code Review via Subagent
 

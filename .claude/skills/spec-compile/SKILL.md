@@ -37,14 +37,15 @@ The spec name is provided via `$ARGUMENTS`.
 
 ### Phase 2: Inventory Existing Steps
 
-3. **Read all existing step definition files** in `test/steps/` using Glob(`test/steps/**/*.{ts,py}`).
-   - Parse each file to extract existing step patterns (Given/When/Then strings).
+3. **Read all existing step definition files** using Glob(`test/steps/**/*.{ts,py}`) and, for cucumber-rs, Glob(`crates/*/tests/bdd/steps/*.rs`).
+   - Parse each file to extract existing step patterns (Given/When/Then strings — for Rust, the string literals inside `#[given(...)]`/`#[when(...)]`/`#[then(...)]` attributes).
    - Build an inventory of reusable steps. This prevents duplicate step definitions.
 
 ### Phase 2.5: Validate Spec Structure
 
-3b. **Check for non-UI-observable lines in Expected Behavior.**
-   - Read each bullet under "Expected Behavior" and check whether it describes something observable in the UI.
+3b. **Check for non-observable lines in Expected Behavior.**
+   - "Observable" means observable at the product's outer surface: the UI for an app, the CLI/public API for a library like this repo (e.g. "the command exits 1 and writes no file" is observable; "the engine holds the session in an Arc" is not).
+   - Read each bullet under "Expected Behavior" and check whether it describes something observable at that surface.
    - Lines about storage backends, hashing algorithms, database tables, performance constraints, or other implementation details are NOT UI-observable.
    - If any non-UI-observable lines are found in Expected Behavior:
      - **Report the violation** to the user: "The following Expected Behavior lines are not UI-observable and should be moved to an 'Implementation Requirements' section: ..."
@@ -97,12 +98,13 @@ Feature: <Feature Title from spec>
 8. **For each new step**, generate a step definition using the project's BDD framework:
    - **playwright-bdd (TypeScript)**: Generate `.ts` files with `createBdd()` pattern
    - **pytest-bdd (Python)**: Generate `.py` files with `@given`, `@when`, `@then` decorators
-   - **Detect which framework** by checking existing step files in `test/steps/`
+   - **cucumber-rs (Rust)**: Generate `.rs` files with `#[given]`/`#[when]`/`#[then]` attribute functions taking `&mut VocalizeWorld` (see `crates/vocalize-core/tests/bdd/steps/smoke.rs` for the shape)
+   - **Detect which framework** by checking existing step files in `test/steps/` and `crates/*/tests/bdd/steps/`
 
 **Step definition rules:**
-- New steps for a feature go in `test/steps/<feature-name>.steps.{ts,py}`
-- Common/reusable steps go in `test/steps/common/`
-- Every new step MUST throw a "not implemented" error by default — this ensures the RED step works
+- New steps for a feature go in `test/steps/<feature-name>.steps.{ts,py}`; for Rust, in `crates/vocalize-core/tests/bdd/steps/<feature_snake>.rs`, and the module MUST be registered with a `pub mod <feature_snake>;` line in `crates/vocalize-core/tests/bdd/steps/mod.rs`
+- Common/reusable steps go in `test/steps/common/` (Rust: a `common.rs` step module)
+- Every new step MUST throw a "not implemented" error by default — this ensures the RED step works (Rust: `todo!("<what the step should verify>")`)
 - Include a `// TODO: Implement` or `# TODO: Implement` comment describing what the step should do
 
 **Step definition resilience rules:**
@@ -117,16 +119,18 @@ Feature: <Feature Title from spec>
 
 If using pytest-bdd, skip this step (pytest discovers features directly).
 
-If bddgen reports errors (missing steps, syntax issues), fix them before proceeding.
+If using cucumber-rs, validate with `cargo check -p vocalize-core --test bdd` (from `crates/`) — this catches syntax errors and unregistered step modules. Unmatched step *strings* only surface at runtime, which the RED run in `/spec-test` exposes.
+
+If validation reports errors (missing steps, syntax issues), fix them before proceeding.
 
 ### Phase 4.5: Generate Unit Test Stubs
 
 11. **Check the spec for an `### Implementation Requirements` section.**
     - If absent, skip this phase entirely.
 
-12. **Check for an existing unit test file** at `test/unit/test_<feature_name>.py`.
-    - Convert the feature name from kebab-case to snake_case (e.g., `user-login` → `test_user_login.py`).
-    - If the file exists, read it and identify which test methods are already implemented (i.e., do NOT contain `pytest.fail`). Preserve these — only add stubs for NEW requirements.
+12. **Check for an existing unit test file** at `test/unit/test_<feature_name>.py` (Python) or `crates/vocalize-core/tests/spec_<feature_name>.rs` (Rust).
+    - Convert the feature name from kebab-case to snake_case (e.g., `user-login` → `test_user_login.py` / `spec_user_login.rs`).
+    - If the file exists, read it and identify which test methods are already implemented (i.e., do NOT contain `pytest.fail` / `panic!("Not implemented`). Preserve these — only add stubs for NEW requirements.
 
 13. **Generate the unit test stub file** with:
 
@@ -157,7 +161,22 @@ class Test<FeatureName>:
 - Include docstring with the original requirement text for traceability
 - Add `# Source:` traceability comment as the first line
 
-14. **Write the unit test file** to `test/unit/test_<feature_name>.py`.
+**Rust equivalent** (`crates/vocalize-core/tests/spec_<feature_name>.rs`):
+
+```rust
+// Source: test/specs/<name>.md — Implementation Requirements
+
+/// <Original requirement text>
+#[test]
+fn test_<requirement_slug>() {
+    // TODO: Implement
+    panic!("Not implemented: <requirement text>");
+}
+```
+
+Same rules: one `#[test]` fn per requirement, `panic!("Not implemented: ...")` guarantees RED, doc comment carries the requirement verbatim.
+
+14. **Write the unit test file** to `test/unit/test_<feature_name>.py` (Python) or `crates/vocalize-core/tests/spec_<feature_name>.rs` (Rust).
 
 ### Phase 5: Present Results
 

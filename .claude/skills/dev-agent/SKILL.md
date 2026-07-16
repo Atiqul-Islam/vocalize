@@ -33,9 +33,9 @@ Your discipline is Uncle Bob's Three Laws of TDD:
 - **Never** write production code that doesn't serve a currently-failing test.
 - **Never** apply broad refactoring during the TDD inner loop — refactor is post-green polish, not exploration.
 - **Always** keep modules under 300 lines, functions under 50 lines (extract when over).
-- **Always** define magic numbers as module-level UPPER_CASE constants.
-- **Always** use type hints on public function signatures, `pathlib` over `os.path`, `logging` over `print`, context managers for resources, f-strings over `.format()`.
-- **Avoid** mutable default arguments.
+- **Always** define magic numbers as module-level UPPER_CASE constants (Rust: `const` items).
+- **Python:** use type hints on public function signatures, `pathlib` over `os.path`, `logging` over `print`, context managers for resources, f-strings over `.format()`; avoid mutable default arguments.
+- **Rust:** respect the crate's `#![deny(unsafe_code)]` — never introduce `unsafe`; return `Result<_, VocalizeError>` from fallible library code (no `unwrap`/`expect` outside tests); use `tracing` over `println!`; keep touched files `cargo fmt`-clean and `cargo clippy`-clean; pin new dependencies deliberately (this workspace has been burned by caret ranges over pre-releases — see the `ort` pin comments).
 
 # Directives You Handle
 
@@ -57,11 +57,11 @@ Your discipline is Uncle Bob's Three Laws of TDD:
 
 Input: `context.diagnostic_from_prior_agent` (a verify-agent verdict identifying the failing test with its error message), `context.target_test` (test method to focus on).
 
-1. Read the target test: `test/unit/test_<feature>.py::Test<Feature>::test_<slug>`.
-2. Read the test's docstring (the original Implementation Requirement) and the assertions.
-3. Identify the **minimum** source code change needed. The change should be in `src/` (typical) or `config/` (if config-derived behavior).
+1. Read the target test: `test/unit/test_<feature>.py::Test<Feature>::test_<slug>` (Python) or `crates/vocalize-core/tests/spec_<feature_snake>.rs::test_<slug>` (Rust).
+2. Read the test's docstring/doc comment (the original Implementation Requirement) and the assertions.
+3. Identify the **minimum** source code change needed. The change should be in `src/` / `crates/*/src/` (typical) or `config/` (if config-derived behavior).
 4. Apply the edit via `Edit` tool. Do not modify the test.
-5. Optionally run `pytest test/unit/test_<feature>.py::Test<Feature>::test_<slug> -v` to fast-confirm green (this is inside-loop verification; verify-agent does the canonical check).
+5. Optionally fast-confirm green with `pytest test/unit/test_<feature>.py::Test<Feature>::test_<slug> -v` (Python) or `cargo test -p vocalize-core --test spec_<feature_snake> test_<slug>` from `crates/` (Rust) — this is inside-loop verification; verify-agent does the canonical check.
 6. Return verdict.
 
 If the test cannot be made to pass without the user clarifying intent (e.g., requirement is genuinely ambiguous), return `NEEDS_INPUT` with the ambiguity in `diagnostic.details`.
@@ -80,7 +80,7 @@ Input: `context.diagnostic_from_prior_agent` (a verify-agent verdict identifying
 2. The skill spawns parallel review agents for code-reuse, quality, efficiency checks and applies fixes.
 3. **Verify the simplifier did not:** alter test files (specs, features, steps, unit tests), change external interfaces/API contracts, or remove functionality. If any violation, undo via Edit and return `ERROR`.
 4. **Quality check:** scan output against CLAUDE.md Code Quality Standards (function size <50, module size <300, no inline magic numbers). Fix violations before returning.
-5. Scope: include `src/`, `app/`, `lib/`, `config/`. Exclude `test/`, `.venv/`, `node_modules/`, `.claude/`, `docs/`, `package.json`, `package-lock.json`.
+5. Scope: include `src/`, `app/`, `lib/`, `config/`, `crates/*/src/`. Exclude `test/`, `crates/*/tests/`, `.venv/`, `node_modules/`, `.claude/`, `docs/`, `package.json`, `package-lock.json`.
 
 ## On `unbreak`
 

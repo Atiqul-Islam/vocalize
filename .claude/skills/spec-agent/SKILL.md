@@ -120,7 +120,7 @@ Write the spec to `test/specs/<feature_slug>.md` ONLY after the supervisor sends
 
 ### Phase A: Inventory existing steps
 
-Glob `test/steps/**/*.{ts,py}`. Parse each file to extract existing step patterns. Build an inventory.
+Glob `test/steps/**/*.{ts,py}` and (cucumber-rs) `crates/*/tests/bdd/steps/*.rs`. Parse each file to extract existing step patterns (for Rust: string literals in `#[given]`/`#[when]`/`#[then]` attributes). Build an inventory.
 
 ### Phase B: Validate spec structure
 
@@ -163,12 +163,13 @@ For each step not in inventory:
 
 - **playwright-bdd:** `.ts` file with `createBdd()` pattern.
 - **pytest-bdd:** `.py` file with `@given`/`@when`/`@then` decorators.
-- Detect framework by inspecting existing `test/steps/`.
+- **cucumber-rs:** `.rs` file with `#[given]`/`#[when]`/`#[then]` attribute fns taking `&mut VocalizeWorld` (shape: `crates/vocalize-core/tests/bdd/steps/smoke.rs`).
+- Detect framework by inspecting existing `test/steps/` and `crates/*/tests/bdd/steps/`.
 
 Rules:
-- New steps go in `test/steps/<slug>.steps.{ts,py}`.
-- Common/reusable steps go in `test/steps/common/`.
-- Every new step throws "not implemented" by default — ensures RED works.
+- New steps go in `test/steps/<slug>.steps.{ts,py}`; Rust steps go in `crates/vocalize-core/tests/bdd/steps/<slug_snake>.rs` and MUST be registered via `pub mod <slug_snake>;` in that directory's `mod.rs`.
+- Common/reusable steps go in `test/steps/common/` (Rust: a `common.rs` step module).
+- Every new step throws "not implemented" by default (Rust: `todo!("...")`) — ensures RED works.
 - Include TODO comment describing what the step should do.
 - Use explicit timeouts on click/action steps.
 - Prefer the locator API.
@@ -181,11 +182,15 @@ If `test/playwright.config.ts` exists: `npx bddgen` from project root. If errors
 
 If pytest-bdd, skip — pytest discovers features directly.
 
+If cucumber-rs: `cargo check -p vocalize-core --test bdd` (from `crates/`) validates syntax and module registration; unmatched step strings surface at the RED run.
+
 ### Phase F: Generate unit test stubs
 
 Only if spec has `### Implementation Requirements`. Otherwise skip.
 
-Read existing `test/unit/test_<feature_snake>.py` if present. Preserve any test methods that don't contain `pytest.fail`.
+Read existing `test/unit/test_<feature_snake>.py` (Python) or `crates/vocalize-core/tests/spec_<feature_snake>.rs` (Rust) if present. Preserve any test methods that don't contain `pytest.fail` / `panic!("Not implemented`.
+
+For Rust, each requirement becomes one `#[test]` fn in `crates/vocalize-core/tests/spec_<feature_snake>.rs` whose body is `panic!("Not implemented: <requirement text>");` with the requirement verbatim in a doc comment (see spec-compile Phase 4.5 for the exact shape). The Python template below applies to Python projects:
 
 Write/update with:
 
@@ -212,7 +217,7 @@ Rules:
 
 ## On `regenerate_stubs`
 
-A unit test in `test/unit/test_<slug>.py` is passing prematurely (RED check found it). Regenerate that specific stub to use a stronger `pytest.fail` and re-emit traceability.
+A unit test stub is passing prematurely (RED check found it). Regenerate that specific stub to use a stronger `pytest.fail` / `panic!("Not implemented: ...")` and re-emit traceability.
 
 ## On `repair_spec`
 

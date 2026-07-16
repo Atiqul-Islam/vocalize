@@ -46,6 +46,8 @@ The arguments are provided via `$ARGUMENTS`.
 
    If the project uses pytest-bdd, skip this step (pytest discovers features directly).
 
+   If the project uses cucumber-rs (this repo: `crates/vocalize-core/tests/bdd.rs`), also skip — step definitions are compiled into the `bdd` test binary, so a missing/renamed step surfaces as a runtime "step doesn't match any function" failure, and a broken step file surfaces as a compile error of the `bdd` target.
+
 ### Phase 3: Start App (if needed)
 
 If the tests require a running application (e.g., end-to-end UI tests):
@@ -76,24 +78,44 @@ If tests don't need a running app (e.g., unit-style BDD tests), skip Phase 3.
    pytest test/features/ -k "<feature-name>" -v
    ```
 
+   **cucumber-rs (Rust):**
+   ```bash
+   # One feature (run from crates/):
+   BDD_FEATURE=test/features/<feature-name>.feature cargo test -p vocalize-core --test bdd
+   # Full BDD suite:
+   cargo test -p vocalize-core --test bdd
+   ```
+
 8. **Capture the output** — pass/fail status, test counts, error details.
 
 ### Phase 4.5: Execute Unit Tests
 
 9. **Determine if unit tests exist for this feature:**
-   - If a specific feature was requested: check for `test/unit/test_<feature_name>.py` (convert kebab-case to snake_case)
-   - If `all` or no arguments: check if any test files exist in `test/unit/`
+   - Python: check for `test/unit/test_<feature_name>.py` (convert kebab-case to snake_case)
+   - Rust: check for `crates/vocalize-core/tests/spec_<feature_name>.rs` (kebab-case to snake_case)
+   - If `all` or no arguments: check if any test files exist in `test/unit/` or any `spec_*.rs` under `crates/*/tests/`
 
 10. **If unit test files exist, run them:**
 
-    **Specific feature:**
+    **Specific feature (Python):**
     ```bash
     pytest test/unit/test_<feature_name>.py -v
     ```
 
-    **Full suite:**
+    **Specific feature (Rust, from crates/):**
+    ```bash
+    cargo test -p vocalize-core --test spec_<feature_name>
+    ```
+
+    **Full suite (Python):**
     ```bash
     pytest test/unit/ -v
+    ```
+
+    **Full suite (Rust, from crates/ — lib tests plus every spec target):**
+    ```bash
+    cargo test --workspace --lib
+    cargo test -p vocalize-core --tests
     ```
 
 11. **If no unit test files found**, skip with note: "Unit tests: skipped (no unit test files found)"
@@ -152,7 +174,7 @@ Unit Tests: skipped (no unit test files found)
 ```
 
 14. **Contextual guidance based on workflow stage:**
-    - If this is the **RED** step (tests expected to fail): "Tests are RED as expected. Enter the TDD loop — pick the first failing unit test, write the minimum code to make it pass, refactor, then move to the next test. Use `pytest test/unit/test_<feature>.py -v` for fast feedback during the loop."
+    - If this is the **RED** step (tests expected to fail): "Tests are RED as expected. Enter the TDD loop — pick the first failing unit test, write the minimum code to make it pass, refactor, then move to the next test. Use `pytest test/unit/test_<feature>.py -v` (Python) or `cargo test -p vocalize-core --test spec_<feature> <test_name>` (Rust) for fast feedback during the loop."
     - If this is the **GREEN** step and BDD tests fail: "Unit tests pass but BDD tests still failing. Return to the TDD loop — the implementation doesn't yet satisfy the acceptance criteria."
     - If this is the **GREEN** step and all pass: "All tests GREEN. Proceed to `/spec-simplify`."
     - If this is the **VERIFY** step (after simplification): Report any failures introduced by simplification.
