@@ -190,3 +190,6 @@ perf.data*
 
 # OS specific files (additional)
 Desktop.ini
+
+# Generated test/quality reports (spec-crap coverage + complexity data)
+test-results/
