@@ -42,8 +42,20 @@ pyo3-log = "0.8"
 uuid = { workspace = true }
 directories = "5.0"
 
-# ONNX Runtime with load-dynamic for LLVM-built binaries
-ort = { version = "2.0.0-rc.10", features = ["load-dynamic"], default-features = false }
+# ONNX Runtime with load-dynamic for LLVM-built binaries.
+#
+# Version is pinned EXACTLY: `ort` is a pre-release crate, and a caret range on a
+# pre-release ("2.0.0-rc.10") lets Cargo float across release candidates that make
+# breaking changes. That float (rc.10 -> rc.12) is what broke this build.
+#
+# `api-22` must match the ONNX Runtime we bundle (1.22.0, see build_*.sh).
+# ort-sys computes ORT_API_VERSION as `17 + <count of enabled api-N features>`
+# (ort-sys/src/version.rs) and gates the fields of the `OrtApi` struct on those
+# same features. With `default-features = false` and no api-N feature, ORT_API_VERSION
+# is 17, so `OrtApi` is missing every field introduced after API 17 -- while
+# `load-dynamic` still compiles the VitisAI execution-provider call that needs the
+# api-18-gated field, which fails to compile (E0609).
+ort = { version = "=2.0.0-rc.12", features = ["load-dynamic", "api-22"], default-features = false }
 
 # Windows API for DLL loading
 [target.'cfg(windows)'.dependencies]
