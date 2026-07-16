@@ -1,6 +1,9 @@
 [project]
-name = "vocalize"
-description = "High-performance text-to-speech synthesis library"
+# PyPI distribution name. The bare "vocalize" name is taken on PyPI by an
+# unrelated package, so the project publishes as "vocalize-tts". The import
+# package, the `vocalize` command, and the GitHub/crates.io names are unchanged.
+name = "vocalize-tts"
+description = "Neural text-to-speech CLI — Kokoro TTS on a Rust ONNX Runtime backend"
 license = {text = "PolyForm-Noncommercial-1.0.0"}
 authors = [
     {name = "Atiqul Islam"},
