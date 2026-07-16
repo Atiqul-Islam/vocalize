@@ -276,64 +276,42 @@ def synthesize_with_tokens(text: str, voice: str, speed: float, pitch: float, mo
             
             return VocalizeComponents.AudioData(samples)
         elif model.startswith("piper-"):
-            # Use GGML engine for Piper models
-            print(f"🎯 Using GGML engine for Piper model: {model}")
-            
-            # Import the Rust GGML bindings
-            with Timer("Import vocalize_rust", verbose):
-                from . import vocalize_rust
-            
-            # Step 1: Convert text to phonemes using fast Rust processor
-            with Timer("Process text to phonemes", verbose):
-                phoneme_ids = vocalize_rust.process_text_to_phonemes(text)
-            
-            print(f"📝 Generated {len(phoneme_ids)} phoneme tokens")
-            
-            # Step 2: Get model path
-            cache_base = platformdirs.user_cache_dir("vocalize", "Vocalize")
-            cache_dir = Path(cache_base) / "models" / "models--direct_download" / "local"
-            
-            # Map model ID to filename
-            model_filenames = {
-                "piper-amy-medium": "en_US-amy-medium.gguf",
-                "piper-amy-low": "en_US-amy-low.gguf",
-            }
-            
-            model_filename = model_filenames.get(model, f"{model}.gguf")
-            model_path = str(cache_dir / model_filename)
-            
-            if not Path(model_path).exists():
-                raise RuntimeError(f"GGUF model not found at {model_path}")
-            
-            # Step 3: Create simple style vector for Piper (neutral voice)
-            style_vector = [0.0] * 256  # Neutral style embedding
-            
-            # Step 4: Synthesize using GGML
-            print(f"🚀 Synthesizing with GGML: {len(phoneme_ids)} tokens, speed: {speed}")
-            
-            rust_call_start = time.perf_counter()
-            samples = vocalize_rust.synthesize_ggml(
-                phoneme_ids,
-                style_vector,
-                speed,
-                model,
-                model_path
+            # The Piper/GGML backend is not available in release builds.
+            #
+            # It is gated behind vocalize-rust's off-by-default `ggml` cargo
+            # feature because the underlying engine is unfinished mock
+            # scaffolding that cannot synthesize speech (it had never even been
+            # compiled). Without that feature the `synthesize_ggml` and
+            # `process_text_to_phonemes` bindings do not exist, so this branch
+            # would previously die on AttributeError -- which the handler below
+            # turned into a silent, empty WAV.
+            #
+            # Fail loudly and specifically instead.
+            raise NotImplementedError(
+                f"The Piper/GGML backend (model {model!r}) is not available in this build.\n"
+                f"It is experimental and does not currently produce speech, so it is "
+                f"disabled by default.\n"
+                f"Use a Kokoro model instead, e.g.: --model kokoro"
             )
-            rust_call_duration = time.perf_counter() - rust_call_start
-            
-            print(f"✅ Got {len(samples)} audio samples from GGML synthesis")
-            if verbose:
-                print(f"  ⏱️  GGML synthesis call: {rust_call_duration:.3f}s")
-            
-            return VocalizeComponents.AudioData(samples)
         else:
             # Fall back to the original synthesis for non-Kokoro models
             return VocalizeComponents.synthesize_text(text, voice, speed, pitch)
             
     except Exception as e:
+        # Do NOT swallow this into empty audio.
+        #
+        # This used to `return AudioData([])`, which meant any synthesis failure
+        # -- a missing model, a dead Rust extension, a broken backend -- printed
+        # one line and then wrote a silent, valid, zero-sample WAV. Nothing
+        # downstream checks for empty samples, so the CLI reported success and
+        # exited 0 while producing a file containing no audio. A user could only
+        # discover the failure by listening to the output.
+        #
+        # The original "prevent infinite loop" rationale does not require
+        # returning empty audio; it only requires not retrying. Raising does not
+        # retry.
         print(f"❌ Token synthesis failed: {e}")
-        # Return empty audio instead of retrying to prevent infinite loop
-        return VocalizeComponents.AudioData([])
+        raise
     finally:
         if verbose:
             total_synthesis_time = time.perf_counter() - synthesis_start

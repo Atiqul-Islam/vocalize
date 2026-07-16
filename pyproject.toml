@@ -5,6 +5,26 @@ build-backend = "maturin"
 [tool.maturin]
 manifest-path = "crates/vocalize-rust/Cargo.toml"
 
+# Ship the `vocalize` Python package (the CLI) alongside the Rust extension.
+#
+# Without this, maturin builds a wheel containing ONLY the compiled
+# `vocalize_rust` extension: no `vocalize/` package, so the `vocalize` command
+# declared in [project.scripts] resolves to a module that isn't installed, and
+# `import vocalize` fails for anyone who installs the wheel. It appeared to work
+# only when run from a checkout, where ./vocalize/ is importable via the cwd.
+#
+# Note this is a maturin key. `[tool.setuptools] packages = [...]` does NOT do
+# this job -- the build backend here is maturin, so setuptools never runs and
+# that table was silently ignored. It has been removed to stop it implying the
+# package was being shipped.
+python-packages = ["vocalize"]
+
+# Keep the extension as a top-level `vocalize_rust` module. The build scripts
+# locate the bundled ONNX Runtime libraries by that directory name, and
+# crates/vocalize-rust/src/lib.rs builds its ORT_DYLIB_PATH from
+# site-packages/vocalize_rust/. Moving it under the package would break both.
+module-name = "vocalize_rust"
+
 [project]
 # PyPI distribution name. The bare "vocalize" name is taken on PyPI by an
 # unrelated package, so the project publishes as "vocalize-tts". The import
@@ -86,9 +106,13 @@ examples = [
 ]
 
 
-# Setuptools configuration for Python packaging
-[tool.setuptools]
-packages = ["vocalize"]
+# NOTE: there is deliberately no [tool.setuptools] table here.
+#
+# This project builds with maturin (see [build-system] above), so setuptools
+# never runs and any [tool.setuptools] config is silently ignored. A
+# `packages = ["vocalize"]` table used to live here and did nothing except imply
+# the Python package was being shipped when it was not. The equivalent that
+# actually works is `python-packages` under [tool.maturin].
 
 
 [tool.pytest.ini_options]
