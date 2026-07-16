@@ -4,10 +4,18 @@ build-backend = "maturin"
 
 [tool.maturin]
 manifest-path = "crates/vocalize-rust/Cargo.toml"
+# The Python package directory is `vocalize/`, but the distribution is named
+# `vocalize-tts` (see [project].name). Without this, maturin would derive the
+# module directory from the distribution name, look for `vocalize_tts/`, fail to
+# find it, and build a Rust-only wheel that silently omits the Python package.
+module-name = "vocalize"
 
 [project]
-name = "vocalize"
-description = "High-performance text-to-speech synthesis library"
+# PyPI distribution name. The bare "vocalize" name is taken on PyPI by an
+# unrelated package, so the project publishes as "vocalize-tts". The import
+# package, the `vocalize` command, and the GitHub/crates.io names are unchanged.
+name = "vocalize-tts"
+description = "Neural text-to-speech CLI — Kokoro TTS on a Rust ONNX Runtime backend"
 license = {text = "PolyForm-Noncommercial-1.0.0"}
 authors = [
     {name = "Atiqul Islam"},
