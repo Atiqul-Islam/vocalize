@@ -258,12 +258,29 @@ class ModelManager:
             print("Error: requests not available. Install with: uv add requests")
             return False
         
-        # 2025 working model URLs
+        # 2025 working model URLs.
+        #
+        # These are exactly the files listed as required for the kokoro model
+        # (see ModelInfo.files above). Do not add optional extras here: every
+        # entry is mandatory, because a failure of any one aborts the whole
+        # download and leaves the model unusable.
+        #
+        # There used to be a third entry, "kokoro-v1.0.int8.onnx", pointing at
+        # taylorchu/kokoro-onnx releases/download/v0.2.0/kokoro-v1.0.int8.onnx.
+        # That asset does not exist and returns 404 -- the v0.2.0 release
+        # publishes kokoro-quant-convinteger.onnx, kokoro-quant.onnx,
+        # kokoro-quant-gpu.onnx and kokoro.onnx, and never had that name. Since
+        # the loop below treats any failure as fatal, that dead URL broke model
+        # download outright: `vocalize speak` could not synthesize at all on a
+        # clean machine, even though the two genuinely required files had
+        # already downloaded successfully.
+        #
+        # The INT8 model is optional and is not this function's job. It is
+        # downloaded on demand, from the correct URL, by
+        # ModelOptimizer.download_quantized_model() (model_optimizer.py).
         model_urls = {
             "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
             "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
-            # Pre-quantized INT8 model from taylorchu with selective layer quantization
-            "kokoro-v1.0.int8.onnx": "https://github.com/taylorchu/kokoro-onnx/releases/download/v0.2.0/kokoro-v1.0.int8.onnx"
         }
         
         # Create local directory
@@ -291,9 +308,23 @@ class ModelManager:
                 print(f"  ✓ Downloaded {filename} ({local_file.stat().st_size // (1024*1024)}MB)")
                 
             except Exception as e:
+                # Remove the partial file before giving up.
+                #
+                # Without this, an interrupted or failed download leaves a
+                # truncated file on disk, and the `local_file.exists()` check
+                # above then treats that corrupt remnant as a valid cached model
+                # on every subsequent run -- so the failure becomes permanent and
+                # silent, and `--force` is the only way out. These are 310MB
+                # downloads, so partial writes are a realistic occurrence.
+                try:
+                    if local_file.exists():
+                        local_file.unlink()
+                        print(f"  🧹 Removed partial download: {filename}")
+                except OSError as cleanup_error:
+                    print(f"  ⚠️  Could not remove partial {filename}: {cleanup_error}")
                 print(f"  ❌ Failed to download {filename}: {e}")
                 return False
-        
+
         print("✅ Successfully downloaded 2025 Kokoro model files")
         return True
     
@@ -679,6 +710,53 @@ class KokoroPhonemeProcessor:
                 print(f"⚠️  Voices file not found: {voices_file}")
                 self.voices = None
         
+    @staticmethod
+    def _ensure_nltk_data() -> bool:
+        """Make sure the NLTK corpora ttstokenizer needs at runtime are present.
+
+        ttstokenizer's IPATokenizer constructs successfully without these, then
+        fails on first use inside NLTK's POS tagger:
+
+            Resource 'averaged_perceptron_tagger_eng' not found.
+
+        Nothing installs this data: it is downloaded at runtime, not shipped in
+        the nltk wheel, so a clean install of vocalize could not synthesize any
+        text at all. We already auto-download the ~310MB model on first run, so
+        fetching a small corpus the same way is consistent -- and far better than
+        making the user run nltk.download() by hand.
+
+        Only 'averaged_perceptron_tagger_eng' is required; that was determined
+        by fetching it alone and confirming synthesis then completes end to end.
+
+        Returns True if the data is available (already present or downloaded).
+        """
+        try:
+            import nltk
+        except ImportError:
+            # nltk arrives as a ttstokenizer dependency. If it is absent,
+            # setup_tokenizer's own ImportError handling reports it.
+            return False
+
+        required = "averaged_perceptron_tagger_eng"
+        try:
+            nltk.data.find(f"taggers/{required}")
+            return True
+        except LookupError:
+            pass
+
+        print(f"📥 Downloading NLTK data '{required}' (first run only)...")
+        try:
+            if nltk.download(required, quiet=True):
+                print(f"✅ NLTK data '{required}' ready")
+                return True
+            print(f"⚠️  NLTK reported failure downloading '{required}'")
+        except Exception as e:
+            print(f"⚠️  Could not download NLTK data '{required}': {e}")
+
+        print(f"   Text-to-phoneme conversion needs it. With network access, run:")
+        print(f"     python -c \"import nltk; nltk.download('{required}')\"")
+        return False
+
     def setup_tokenizer(self):
         """Setup ttstokenizer for phoneme processing - uses cached instance when possible."""
         # Check if we already have a shared tokenizer
@@ -699,6 +777,12 @@ class KokoroPhonemeProcessor:
                 import time
                 start = time.perf_counter()
                 from ttstokenizer import IPATokenizer
+
+                # Must happen before the tokenizer is used. IPATokenizer()
+                # itself succeeds without the corpora; the failure only surfaces
+                # later, mid-synthesis, from inside NLTK.
+                KokoroPhonemeProcessor._ensure_nltk_data()
+
                 tokenizer = IPATokenizer()
                 duration = time.perf_counter() - start
                 

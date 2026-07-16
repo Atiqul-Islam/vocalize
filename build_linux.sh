@@ -22,26 +22,38 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
 # Clean previous builds
+# Wheels are named for the DISTRIBUTION (vocalize-tts -> vocalize_tts-*), not
+# for the Rust crate. They were vocalize_rust-* back when this script built
+# crates/vocalize-rust/pyproject.toml directly.
 print_info "Cleaning previous Linux builds..."
-rm -rf crates/target/wheels/vocalize_rust-*-manylinux*.whl 2>/dev/null || true
-rm -rf crates/target/wheels/vocalize_rust-*-linux*.whl 2>/dev/null || true
+rm -rf crates/target/wheels/vocalize_tts-*-manylinux*.whl 2>/dev/null || true
+rm -rf crates/target/wheels/vocalize_tts-*-linux*.whl 2>/dev/null || true
 
 # Step 1: Build the wheel with maturin
 echo ""
 echo "Step 1: Building wheel with maturin..."
 echo "========================================="
 
+# Build from the ROOT pyproject.toml -- do NOT pass --manifest-path here.
+#
+# --manifest-path made maturin use crates/vocalize-rust/pyproject.toml, which
+# declares no `python-packages`. That produced a wheel containing ONLY the
+# compiled extension: no `vocalize` package and no `vocalize` command, published
+# under the wrong distribution name (vocalize-rust instead of vocalize-tts).
+#
+# The root pyproject.toml already points maturin at the same crate via
+# [tool.maturin] manifest-path, and additionally ships the `vocalize` package
+# and the console script. Same extension, complete wheel.
 maturin build --release \
-    --manifest-path crates/vocalize-rust/Cargo.toml \
     --interpreter python3.10 || {
     print_error "Failed to build wheel with maturin"
     exit 1
 }
 
 # Find the built wheel
-WHEEL_FILE=$(ls crates/target/wheels/vocalize_rust-*-manylinux*.whl 2>/dev/null | head -1)
+WHEEL_FILE=$(ls crates/target/wheels/vocalize_tts-*-manylinux*.whl 2>/dev/null | head -1)
 if [ -z "$WHEEL_FILE" ]; then
-    WHEEL_FILE=$(ls crates/target/wheels/vocalize_rust-*-linux*.whl 2>/dev/null | head -1)
+    WHEEL_FILE=$(ls crates/target/wheels/vocalize_tts-*-linux*.whl 2>/dev/null | head -1)
 fi
 
 if [ -z "$WHEEL_FILE" ]; then
@@ -203,11 +215,28 @@ echo ""
 echo "Step 6: Creating bundled wheel..."
 echo "========================================="
 
-# Create new wheel filename
-BUNDLED_WHEEL="${WHEEL_FILE%.whl}_bundled.whl"
+# Repack OVER the original wheel. Do NOT invent a new filename.
+#
+# This used to write "${WHEEL_FILE%.whl}_bundled.whl", which produced
+# vocalize_tts-0.1.0-cp38-abi3-manylinux_2_34_x86_64_bundled.whl. A wheel
+# filename is parsed positionally as
+#   {distribution}-{version}(-{build})?-{python}-{abi}-{platform}.whl
+# so that "_bundled" suffix landed inside the PLATFORM tag, making it
+# "manylinux_2_34_x86_64_bundled" -- not a platform tag any installer
+# recognises. The bundled wheel, i.e. the actual release artifact, was therefore
+# uninstallable:
+#   uv pip install ..._bundled.whl
+#   error: A path dependency is incompatible with the current platform
+# Verified: the same bytes under the correct filename install cleanly.
+#
+# Replacing the original in place is what auditwheel/delvewheel do; the
+# unbundled wheel is an intermediate and must not be shipped or kept around to
+# be published by mistake.
+BUNDLED_WHEEL="$WHEEL_FILE"
 BUNDLED_WHEEL_NAME=$(basename "$BUNDLED_WHEEL")
 
 # Create the wheel
+rm -f "$PROJECT_DIR/$BUNDLED_WHEEL"
 python3 -m zipfile -c "$PROJECT_DIR/$BUNDLED_WHEEL" . || {
     print_error "Failed to create bundled wheel"
     cd "$PROJECT_DIR"
@@ -221,12 +250,75 @@ rm -rf "$TEMP_DIR"
 
 print_success "Created bundled Linux wheel: $BUNDLED_WHEEL_NAME"
 
+# Step 6b: Verify the wheel is actually shippable
+#
+# This gate exists because every defect it checks for has already shipped once:
+# a wheel with no `vocalize` package, no console script, and a platform tag
+# corrupted by a "_bundled" suffix that made it uninstallable. Fail the build
+# rather than hand over a broken artifact.
+echo ""
+echo "Step 6b: Verifying wheel contents..."
+echo "========================================="
+
+if ! python3 - "$PROJECT_DIR/$BUNDLED_WHEEL" <<'PYEOF'
+import sys, zipfile, re
+from pathlib import Path
+
+path = Path(sys.argv[1])
+errors = []
+
+# The filename must parse as a valid wheel name; the platform tag in particular
+# must not have picked up a suffix.
+stem = path.name[:-4] if path.name.endswith(".whl") else path.name
+parts = stem.split("-")
+if len(parts) not in (5, 6):
+    errors.append(f"filename does not parse as a wheel: {path.name}")
+else:
+    platform_tag = parts[-1]
+    if not re.fullmatch(r"(manylinux[0-9_]*_(x86_64|aarch64)|linux_(x86_64|aarch64)|any)", platform_tag):
+        errors.append(f"invalid platform tag {platform_tag!r} in {path.name}")
+
+z = zipfile.ZipFile(path)
+names = z.namelist()
+
+if not any(n.startswith("vocalize/") and n.endswith(".py") for n in names):
+    errors.append("wheel contains no `vocalize` Python package")
+if not any(n == "vocalize/cli.py" for n in names):
+    errors.append("wheel is missing vocalize/cli.py")
+if not any("vocalize_rust" in n and n.endswith(".so") for n in names):
+    errors.append("wheel contains no compiled vocalize_rust extension")
+if not any("libonnxruntime.so" in n for n in names):
+    errors.append("wheel does not bundle libonnxruntime.so")
+
+ep = [n for n in names if n.endswith("entry_points.txt")]
+if not ep:
+    errors.append("wheel declares no entry_points.txt (no `vocalize` command)")
+elif "vocalize.cli:main" not in z.read(ep[0]).decode():
+    errors.append("entry_points.txt does not point at vocalize.cli:main")
+
+if errors:
+    for e in errors:
+        print(f"  FAIL: {e}")
+    sys.exit(1)
+
+print(f"  OK: valid platform tag {parts[-1]}")
+print(f"  OK: {sum(1 for n in names if n.startswith('vocalize/'))} vocalize/ package files")
+print("  OK: vocalize_rust extension present")
+print("  OK: libonnxruntime bundled")
+print("  OK: `vocalize` console script -> vocalize.cli:main")
+PYEOF
+then
+    print_error "Wheel verification FAILED - refusing to ship this artifact"
+    exit 1
+fi
+
+print_success "Wheel verification passed"
+
 # Step 7: Display summary
 echo ""
 echo "✨ Build Summary"
 echo "================"
-echo "Original wheel: $(basename "$WHEEL_FILE")"
-echo "Bundled wheel:  $BUNDLED_WHEEL_NAME"
+echo "Wheel:          $BUNDLED_WHEEL_NAME"
 echo "Location:       crates/target/wheels/"
 echo ""
 echo "📦 Bundled libraries:"
@@ -239,6 +331,10 @@ fi
 echo ""
 echo "🚀 To install and test:"
 echo "  uv pip install $BUNDLED_WHEEL --force-reinstall"
-echo "  uv run python -m vocalize speak \"Hello Linux\" --output test.wav"
+# The wheel now ships the `vocalize` console script, so this no longer has to be
+# run from a checkout. The old instructions used `uv run python -m vocalize`,
+# which only worked because ./vocalize/ was importable from the repo cwd -- the
+# wheel itself contained no Python package at all.
+echo "  vocalize speak \"Hello Linux\" --output test.wav"
 echo ""
 print_success "Build complete!"

@@ -64,6 +64,15 @@ dependencies = [
     "ttstokenizer>=1.1.0",
     "tinynumpy>=1.2.1",
     "platformdirs>=4.0.0",
+    # Used directly by model_manager.py, model_optimizer.py and cache_builder.py
+    # (the latter imports it at module top level). It was never declared here and
+    # only worked by accident: huggingface-hub <1.0 required `requests`, so it
+    # arrived transitively. huggingface-hub 1.x moved to httpx as its core HTTP
+    # client and demoted `requests` to an optional extra, so it stopped being
+    # installed -- and because `huggingface-hub>=0.33.2` is unbounded, a fresh
+    # install resolves to 1.x. The result: model download died with "requests not
+    # available", so a freshly installed wheel could not synthesize anything.
+    "requests>=2.31.0",
     "toml>=0.10.2",  # For configuration file management
     "onnxruntime>=1.16.0",  # Required for graph optimization and quantization
     "onnx>=1.14.0",  # Required for model manipulation
