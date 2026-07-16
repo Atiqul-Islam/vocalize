@@ -93,6 +93,10 @@ test-log = "0.2"
 serial_test = "3.1"
 rstest = "0.18"
 
+# BDD acceptance layer (spec-forge flow): Gherkin features in test/features/
+# at the repo root, step definitions in tests/bdd/steps/.
+cucumber = "0.23"
+
 [features]
 default = []
 # Feature for embedding models directly in binary
@@ -119,6 +123,10 @@ onnx = ["ort"]
 # Enabling this feature builds code that cannot produce speech. Finishing it
 # means writing a real VITS forward pass, not repairing these errors.
 ggml = []
+
+[[test]]
+name = "bdd"
+harness = false
 
 [[bench]]
 name = "tts_benchmark"
