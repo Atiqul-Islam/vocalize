@@ -530,39 +530,55 @@ mod tests {
         assert!(!voice.supports_language("fr-FR"));
     }
 
+    /// Build a valid Voice for tests.
+    ///
+    /// Tests must not use `Voice::default()`: it panics on purpose, because the
+    /// Python frontend owns voice loading and Rust must never invent a default
+    /// voice. That contract is itself asserted by `test_voice_default_panics`
+    /// below. `Voice::new` is the supported way to construct one.
+    fn valid_test_voice() -> Voice {
+        Voice::new(
+            "test_voice".to_string(),
+            "Test Voice".to_string(),
+            "en-US".to_string(),
+            Gender::Female,
+            VoiceStyle::Natural,
+        )
+    }
+
     #[test]
     fn test_voice_validation() {
         // Valid voice
-        let voice = Voice::default();
+        let voice = valid_test_voice();
         assert!(voice.validate().is_ok());
 
         // Empty ID
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.id.clear();
         assert!(voice.validate().is_err());
 
         // Empty name
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.name.clear();
         assert!(voice.validate().is_err());
 
         // Empty language
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.language.clear();
         assert!(voice.validate().is_err());
 
         // Invalid speed
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.speed = 0.05;
         assert!(voice.validate().is_err());
 
         // Invalid pitch
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.pitch = 2.0;
         assert!(voice.validate().is_err());
 
         // Invalid sample rate
-        let mut voice = Voice::default();
+        let mut voice = valid_test_voice();
         voice.sample_rate = 1000;
         assert!(voice.validate().is_err());
     }
@@ -673,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_voice_serialization() {
-        let voice = Voice::default();
+        let voice = valid_test_voice();
         let json = serde_json::to_string(&voice).expect("Should serialize");
         let deserialized: Voice = serde_json::from_str(&json).expect("Should deserialize");
         assert_eq!(voice, deserialized);
