@@ -16,8 +16,15 @@ name = "vocalize_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Core vocalize library
-vocalize-core = { path = "../vocalize-core" }
+# Core vocalize library.
+#
+# The `onnx` feature is REQUIRED, not optional: src/lib.rs calls
+# `vocalize_core::onnx_engine::OnnxTtsEngine`, and vocalize-core gates that
+# module behind `#[cfg(feature = "onnx")]` (vocalize-core/src/lib.rs:41). This
+# dependency previously enabled no features at all, so the module the bindings
+# depend on was compiled out and this crate could not build. It went unnoticed
+# only because the build already died earlier, in `ort` and in ggml_engine.
+vocalize-core = { path = "../vocalize-core", features = ["onnx"] }
 
 # PyO3 for Python bindings
 pyo3 = { version = "0.20", features = ["extension-module", "abi3-py38", "generate-import-lib"] }
@@ -44,18 +51,31 @@ directories = "5.0"
 
 # ONNX Runtime with load-dynamic for LLVM-built binaries.
 #
-# Version is pinned EXACTLY: `ort` is a pre-release crate, and a caret range on a
-# pre-release ("2.0.0-rc.10") lets Cargo float across release candidates that make
-# breaking changes. That float (rc.10 -> rc.12) is what broke this build.
+# PINNED EXACTLY, AND THE `=` MATTERS. `ort` is a pre-release crate, and a caret
+# range over a pre-release ("2.0.0-rc.10") lets Cargo float across release
+# candidates that make breaking API changes. This dependency previously read
+# "2.0.0-rc.10" but silently resolved to rc.12, and that float is the single
+# root cause of what looked like three unrelated build failures.
 #
-# `api-22` must match the ONNX Runtime we bundle (1.22.0, see build_*.sh).
-# ort-sys computes ORT_API_VERSION as `17 + <count of enabled api-N features>`
-# (ort-sys/src/version.rs) and gates the fields of the `OrtApi` struct on those
-# same features. With `default-features = false` and no api-N feature, ORT_API_VERSION
-# is 17, so `OrtApi` is missing every field introduced after API 17 -- while
-# `load-dynamic` still compiles the VitisAI execution-provider call that needs the
-# api-18-gated field, which fails to compile (E0609).
-ort = { version = "=2.0.0-rc.12", features = ["load-dynamic", "api-22"], default-features = false }
+# rc.10 and rc.12 are different API generations targeting different runtimes:
+#   - rc.10 wraps ONNX Runtime 1.22 -- which is exactly what build_*.sh bundles
+#     (libonnxruntime.so.1.22.0). `ort::Error` is a plain, Send + Sync type.
+#   - rc.12 wraps ONNX Runtime 1.24. It makes `Error` generic (`Error<R = ()>`,
+#     ort-2.0.0-rc.12/src/error.rs:75), so a failed call yields
+#     `ort::Error<SessionBuilder>` carrying a non-Send/non-Sync payload. That
+#     does not convert into `anyhow::Error`, which breaks every `?` on an ort
+#     call: 75 errors in model/manager.rs and onnx_engine.rs.
+#
+# Under rc.12 the build died even earlier, inside ort itself (E0609, no field
+# `SessionOptionsAppendExecutionProvider_VitisAI` on `OrtApi`). That was a
+# symptom of the same wrong-generation problem, not a separate bug, and
+# "fixing" it by adding an api-N feature only unmasked the 75 errors behind it.
+#
+# So: do not "upgrade" this to rc.12 to make an error go away. Moving to rc.12
+# means porting the ort call sites to the generic `Error` type AND re-bundling
+# ONNX Runtime 1.24 in all three build scripts. Verified: with this pin,
+# `cargo check -p vocalize-core --features onnx` reports 0 errors.
+ort = { version = "=2.0.0-rc.10", features = ["load-dynamic"], default-features = false }
 
 # Windows API for DLL loading
 [target.'cfg(windows)'.dependencies]
@@ -72,4 +92,12 @@ pyo3-build-config = "0.20"
 [features]
 default = []
 # Removed audio feature - now built-in with OS native APIs
+
+# Experimental GGML/GGUF backend. OFF BY DEFAULT.
+#
+# Enabling this exposes the `process_text_to_phonemes` and `synthesize_ggml`
+# Python functions, which route to vocalize-core's mock GGML engine. That engine
+# cannot synthesize speech -- see vocalize-core/Cargo.toml's `ggml` feature for
+# the evidence. Do not enable this for a release build.
+ggml = ["vocalize-core/ggml"]
 

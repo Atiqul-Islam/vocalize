@@ -25,6 +25,11 @@ pub use audio_device::PyAudioDevice as AudioDevice;
 
 
 /// Fast text to phonemes processing using GGML engine
+///
+/// Only built when the `ggml` feature is enabled. That feature is off by
+/// default because the GGML engine is unfinished mock scaffolding; see
+/// vocalize-core/Cargo.toml.
+#[cfg(feature = "ggml")]
 #[pyfunction]
 fn process_text_to_phonemes(text: String) -> PyResult<Vec<i64>> {
     use vocalize_core::ggml_engine::GGMLTtsEngine;
@@ -44,6 +49,11 @@ fn process_text_to_phonemes(text: String) -> PyResult<Vec<i64>> {
 }
 
 /// GGML-based TTS synthesis using Piper models
+///
+/// Only built when the `ggml` feature is enabled. That feature is off by
+/// default because the GGML engine is unfinished mock scaffolding; see
+/// vocalize-core/Cargo.toml.
+#[cfg(feature = "ggml")]
 #[pyfunction]
 #[pyo3(signature = (input_ids, style_vector, speed, model_id, model_path))]
 fn synthesize_ggml(
@@ -414,9 +424,12 @@ fn vocalize_rust(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(synthesize_from_tokens_neural, m)?)?;
     m.add_function(wrap_pyfunction!(save_audio_neural, m)?)?;
     
-    // Add GGML functions
-    m.add_function(wrap_pyfunction!(process_text_to_phonemes, m)?)?;
-    m.add_function(wrap_pyfunction!(synthesize_ggml, m)?)?;
+    // Add GGML functions (only when the off-by-default `ggml` feature is on)
+    #[cfg(feature = "ggml")]
+    {
+        m.add_function(wrap_pyfunction!(process_text_to_phonemes, m)?)?;
+        m.add_function(wrap_pyfunction!(synthesize_ggml, m)?)?;
+    }
     
     // Add constants
     m.add("DEFAULT_SAMPLE_RATE", vocalize_core::DEFAULT_SAMPLE_RATE)?;

@@ -44,8 +44,17 @@ serde_json = "1.0"
 # Text processing
 unicode-normalization = "0.1"
 
-# ONNX Runtime (optional for fallback)
-ort = { version = "2.0.0-rc.2", optional = true }
+# ONNX Runtime. Must stay consistent with vocalize-rust's `ort` dependency:
+# Cargo unifies features across the workspace, so if this one kept its default
+# features it would union `download-binaries`/`copy-dylibs` into the
+# `load-dynamic` build that vocalize-rust needs, and silently undermine the
+# self-contained-wheel strategy.
+#
+# This previously read "2.0.0-rc.2" -- a caret range, so it never actually
+# resolved to rc.2; it floated to whatever the workspace unified on. See
+# vocalize-rust/Cargo.toml for the full story on why the pin is exact and why
+# rc.12 does not work here.
+ort = { version = "=2.0.0-rc.10", features = ["load-dynamic"], default-features = false, optional = true }
 
 # Audio file writing (no external system deps)
 hound = "3.5"  # WAV writing
@@ -88,8 +97,28 @@ rstest = "0.18"
 default = []
 # Feature for embedding models directly in binary
 embedded-models = []
-# ONNX backend support
+# ONNX backend support. This is the real, shipping synthesis path (Kokoro).
 onnx = ["ort"]
+# Experimental GGML/GGUF backend. OFF BY DEFAULT, and it must stay that way
+# until it actually works.
+#
+# Status as of 2026-07-15: unfinished scaffolding. It had never been compiled --
+# it was committed with 7 compile errors (`?` applied to non-Result values,
+# missing Debug impls, and an mmap `unsafe` block that violates this crate's
+# `#![deny(unsafe_code)]`). Because it has never compiled, it has never shipped
+# in a wheel, so gating it off removes no working functionality.
+#
+# It is also not merely incomplete, it is a mock: `apply_attention` returns its
+# input unchanged (ggml_engine/vits_model.rs:71-81), the feed-forward ignores
+# its weights (:83-93), "convolutions" slice the first N floats of a weight
+# tensor as a kernel, and the decoder mixes with hardcoded literals (:169).
+# Despite the name, no ggml/llama.cpp/candle dependency exists -- the tensor
+# type is a hand-rolled f32 Vec wrapper whose own docstring says "mock
+# implementation" (ggml_engine/simple_tensor.rs:1).
+#
+# Enabling this feature builds code that cannot produce speech. Finishing it
+# means writing a real VITS forward pass, not repairing these errors.
+ggml = []
 
 [[bench]]
 name = "tts_benchmark"

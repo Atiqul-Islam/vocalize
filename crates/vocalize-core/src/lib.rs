@@ -40,6 +40,7 @@ pub mod error;
 pub mod model;
 #[cfg(feature = "onnx")]
 pub mod onnx_engine;
+#[cfg(feature = "ggml")]
 pub mod ggml_engine;
 pub mod voice_manager;
 pub mod wav_writer;
@@ -51,6 +52,7 @@ pub use error::{VocalizeError, VocalizeResult};
 pub use model::{ModelId, ModelInfo, ModelManager, ModelConfig};
 #[cfg(feature = "onnx")]
 pub use onnx_engine::OnnxTtsEngine;
+#[cfg(feature = "ggml")]
 pub use ggml_engine::GGMLTtsEngine;
 /// Audio data type - 32-bit floating point samples
 pub type AudioData = Vec<f32>;
